@@ -130,7 +130,19 @@
 
     function setupDoubleTap(maxZoom) {
       let lastTap = 0;
+      let wasMultiTouch = false;
+
+      viewport.ontouchstart = (e) => {
+        if (e.touches.length > 1) wasMultiTouch = true;
+      };
+
       viewport.ontouchend = (e) => {
+        if (e.touches.length > 0) return; // wait until all fingers are up
+
+        const isPinchRelease = wasMultiTouch;
+        wasMultiTouch = false;
+        if (isPinchRelease) return; // don't treat pinch-zoom release as a tap
+
         const now = Date.now();
         if (now - lastTap < 300) {
           const t = e.changedTouches[0];
@@ -140,8 +152,10 @@
           const cur = pz.getTransform();
           const target = cur.scale > 1.5 ? 1 : Math.min(4, maxZoom);
           pz.smoothZoom(x, y, target / cur.scale);
+          lastTap = 0;
+        } else {
+          lastTap = now;
         }
-        lastTap = now;
       };
     }
 
