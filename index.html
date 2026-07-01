@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>KBS VID DIAG 뷰어</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: #1b1b1b; color: #eee;
+    font-family: -apple-system, "Malgun Gothic", sans-serif;
+    -webkit-user-select: none; user-select: none;
+  }
+  #bar {
+    position: fixed; top: 0; left: 0; right: 0; height: 52px;
+    background: #222; display: flex; align-items: center;
+    justify-content: space-between; padding: 0 8px; z-index: 10;
+    box-shadow: 0 2px 6px rgba(0,0,0,.4);
+  }
+  #bar .group { display: flex; align-items: center; gap: 6px; }
+  #bar button {
+    background: #3a3a3a; color: #eee; border: none; border-radius: 6px;
+    width: 40px; height: 40px; font-size: 18px; touch-action: manipulation;
+  }
+  #bar button:disabled { opacity: .35; }
+  #pageLabel { font-size: 14px; min-width: 52px; text-align: center; }
+  #title { font-size: 13px; color: #aaa; max-width: 40vw; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
+  #viewport {
+    position: absolute; top: 52px; left: 0; right: 0; bottom: 0;
+    overflow: hidden; touch-action: none; background: #2b2b2b;
+  }
+  #canvasWrap { transform-origin: 0 0; }
+  canvas { display: block; background: #fff; box-shadow: 0 0 12px rgba(0,0,0,.5); }
+  #status {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    color: #ccc; font-size: 15px; z-index: 5;
+  }
+</style>
+</head>
+<body>
+  <div id="bar">
+    <div class="group">
+      <button id="prevBtn">‹</button>
+      <span id="pageLabel">-/-</span>
+      <button id="nextBtn">›</button>
+    </div>
+    <div id="title">3238_KBS_VID_DIAG_D03</div>
+    <div class="group">
+      <button id="resetBtn">⤢</button>
+    </div>
+  </div>
+  <div id="viewport">
+    <div id="status">불러오는 중...</div>
+    <div id="canvasWrap"><canvas id="pdfCanvas"></canvas></div>
+  </div>
+
+  <script src="vendor/pdf.min.js"></script>
+  <script src="vendor/panzoom.min.js"></script>
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdf.worker.min.js';
+
+    const PDF_URL = './3238_KBS_VID_DIAG_D03.pdf';
+    const TARGET_INTRINSIC_WIDTH = 5000; // px, high-res render for crisp pinch zoom
+
+    const viewport = document.getElementById('viewport');
+    const canvasWrap = document.getElementById('canvasWrap');
+    const canvas = document.getElementById('pdfCanvas');
+    const ctx = canvas.getContext('2d');
+    const statusEl = document.getElementById('status');
+    const pageLabel = document.getElementById('pageLabel');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const resetBtn = document.getElementById('resetBtn');
+
+    let pdfDoc = null;
+    let currentPage = 1;
+    let pz = null;
+    let renderToken = 0;
+
+    function setStatus(msg) {
+      statusEl.style.display = msg ? 'block' : 'none';
+      statusEl.textContent = msg || '';
+    }
+
+    async function renderPage(num) {
+      const myToken = ++renderToken;
+      setStatus('페이지 ' + num + ' 렌더링 중...');
+      prevBtn.disabled = true; nextBtn.disabled = true;
+
+      const page = await pdfDoc.getPage(num);
+      if (myToken !== renderToken) return;
+
+      const baseViewport = page.getViewport({ scale: 1 });
+      const renderScale = TARGET_INTRINSIC_WIDTH / baseViewport.width;
+      const pdfViewport = page.getViewport({ scale: renderScale });
+
+      canvas.width = Math.floor(pdfViewport.width);
+      canvas.height = Math.floor(pdfViewport.height);
+
+      await page.render({ canvasContext: ctx, viewport: pdfViewport }).promise;
+      if (myToken !== renderToken) return;
+
+      // fit-to-width display size
+      const displayWidth = Math.min(viewport.clientWidth, viewport.clientHeight * (canvas.width / canvas.height));
+      const displayHeight = displayWidth * (canvas.height / canvas.width);
+      canvas.style.width = displayWidth + 'px';
+      canvas.style.height = displayHeight + 'px';
+
+      const maxZoom = Math.max(6, Math.min(20, canvas.width / displayWidth));
+
+      if (pz) pz.dispose();
+      pz = panzoom(canvasWrap, {
+        maxZoom: maxZoom,
+        minZoom: 1,
+        bounds: true,
+        boundsPadding: 0.15,
+        zoomDoubleClickSpeed: 1,
+        smoothScroll: false
+      });
+
+      setupDoubleTap(maxZoom);
+
+      currentPage = num;
+      pageLabel.textContent = num + '/' + pdfDoc.numPages;
+      prevBtn.disabled = num <= 1;
+      nextBtn.disabled = num >= pdfDoc.numPages;
+      setStatus('');
+    }
+
+    function setupDoubleTap(maxZoom) {
+      let lastTap = 0;
+      viewport.ontouchend = (e) => {
+        const now = Date.now();
+        if (now - lastTap < 300) {
+          const t = e.changedTouches[0];
+          const rect = viewport.getBoundingClientRect();
+          const x = t.clientX - rect.left;
+          const y = t.clientY - rect.top;
+          const cur = pz.getTransform();
+          const target = cur.scale > 1.5 ? 1 : Math.min(4, maxZoom);
+          pz.smoothZoom(x, y, target / cur.scale);
+        }
+        lastTap = now;
+      };
+    }
+
+    resetBtn.onclick = () => {
+      if (!pz) return;
+      pz.moveTo(0, 0);
+      pz.zoomAbs(0, 0, 1);
+    };
+    prevBtn.onclick = () => { if (currentPage > 1) renderPage(currentPage - 1); };
+    nextBtn.onclick = () => { if (currentPage < pdfDoc.numPages) renderPage(currentPage + 1); };
+
+    (async function init() {
+      try {
+        setStatus('PDF 불러오는 중...');
+        pdfDoc = await pdfjsLib.getDocument(PDF_URL).promise;
+        await renderPage(1);
+      } catch (err) {
+        setStatus('불러오기 실패: ' + err.message);
+        console.error(err);
+      }
+    })();
+
+    window.addEventListener('resize', () => renderPage(currentPage));
+  </script>
+</body>
+</html>
