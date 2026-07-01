@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>도면 뷰어</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: #1b1b1b; color: #eee;
+    font-family: -apple-system, "Malgun Gothic", sans-serif;
+    -webkit-user-select: none; user-select: none;
+  }
+  #bar {
+    position: fixed; top: 0; left: 0; right: 0; height: 52px;
+    background: #222; display: flex; align-items: center;
+    justify-content: space-between; padding: 0 8px; z-index: 10;
+    box-shadow: 0 2px 6px rgba(0,0,0,.4);
+  }
+  #bar .group { display: flex; align-items: center; gap: 6px; }
+  #bar button, #bar a.btn {
+    background: #3a3a3a; color: #eee; border: none; border-radius: 6px;
+    width: 40px; height: 40px; font-size: 18px; touch-action: manipulation;
+    display: flex; align-items: center; justify-content: center;
+    text-decoration: none;
+  }
+  #bar button:disabled { opacity: .35; }
+  #pageLabel { font-size: 14px; min-width: 52px; text-align: center; }
+  #title { font-size: 13px; color: #aaa; max-width: 32vw; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
+  #viewport {
+    position: absolute; top: 52px; left: 0; right: 0; bottom: 0;
+    overflow: hidden; touch-action: none; background: #2b2b2b;
+  }
+  #canvasWrap { transform-origin: 0 0; }
+  canvas { display: block; background: #fff; box-shadow: 0 0 12px rgba(0,0,0,.5); }
+  #status {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    color: #ccc; font-size: 15px; z-index: 5;
+  }
+</style>
+</head>
+<body>
+  <div id="bar">
+    <div class="group">
+      <a class="btn" href="index.html">🏠</a>
+      <button id="prevBtn">‹</button>
+      <span id="pageLabel">-/-</span>
+      <button id="nextBtn">›</button>
+    </div>
+    <div id="title"></div>
+    <div class="group">
+      <button id="resetBtn">⤢</button>
+    </div>
+  </div>
+  <div id="viewport">
+    <div id="status">불러오는 중...</div>
+    <div id="canvasWrap"><canvas id="pdfCanvas"></canvas></div>
+  </div>
+
+  <script src="vendor/pdf.min.js"></script>
+  <script src="vendor/panzoom.min.js"></script>
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdf.worker.min.js';
+
+    const params = new URLSearchParams(location.search);
+    const PDF_URL = './' + (params.get('pdf') || '');
+    const TITLE = params.get('title') || '';
+    const TARGET_PIXEL_BUDGET = 64_000_000; // total canvas pixels per page, high-res for crisp zoom
+    const MAX_ZOOM_FLOOR = 10;
+    const MAX_ZOOM_CEILING = 30;
+    const INITIAL_ZOOM = 1; // zoom level shown right after loading a page (1 = fit to screen)
+
+    document.getElementById('title').textContent = TITLE;
+    document.title = TITLE ? (TITLE + ' 도면') : '도면 뷰어';
+
+    const viewport = document.getElementById('viewport');
+    const canvasWrap = document.getElementById('canvasWrap');
+    const canvas = document.getElementById('pdfCanvas');
+    const ctx = canvas.getContext('2d');
+    const statusEl = document.getElementById('status');
+    const pageLabel = document.getElementById('pageLabel');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const resetBtn = document.getElementById('resetBtn');
+
+    let pdfDoc = null;
+    let currentPage = 1;
+    let pz = null;
+    let renderToken = 0;
+    let curMaxZoom = 4;
+    let curStartZoom = 1.8;
+    let curDisplayWidth = 0;
+    let curDisplayHeight = 0;
+    const pageCache = new Map(); // pageNum -> { width, height, bitmap }
+
+    function goToScale(scale) {
+      pz.zoomAbs(0, 0, scale);
+      const w = curDisplayWidth * scale;
+      const h = curDisplayHeight * scale;
+      pz.moveTo((viewport.clientWidth - w) / 2, (viewport.clientHeight - h) / 2);
+    }
+
+    function setStatus(msg) {
+      statusEl.style.display = msg ? 'block' : 'none';
+      statusEl.textContent = msg || '';
+    }
+
+    async function renderPage(num) {
+      const myToken = ++renderToken;
+      prevBtn.disabled = true; nextBtn.disabled = true;
+
+      const cached = pageCache.get(num);
+      if (cached) {
+        // already rendered once this session: instant redisplay, no pdf.js work
+        canvas.width = cached.width;
+        canvas.height = cached.height;
+        ctx.drawImage(cached.bitmap, 0, 0);
+      } else {
+        setStatus('페이지 ' + num + ' 렌더링 중...');
+        const page = await pdfDoc.getPage(num);
+        if (myToken !== renderToken) return;
+
+        const baseViewport = page.getViewport({ scale: 1 });
+        const renderScale = Math.sqrt(TARGET_PIXEL_BUDGET / (baseViewport.width * baseViewport.height));
+        const pdfViewport = page.getViewport({ scale: renderScale });
+
+        canvas.width = Math.floor(pdfViewport.width);
+        canvas.height = Math.floor(pdfViewport.height);
+
+        await page.render({ canvasContext: ctx, viewport: pdfViewport }).promise;
+        if (myToken !== renderToken) return;
+
+        const snap = document.createElement('canvas');
+        snap.width = canvas.width;
+        snap.height = canvas.height;
+        snap.getContext('2d').drawImage(canvas, 0, 0);
+        pageCache.set(num, { width: canvas.width, height: canvas.height, bitmap: snap });
+      }
+
+      // fit-to-width display size
+      const displayWidth = Math.min(viewport.clientWidth, viewport.clientHeight * (canvas.width / canvas.height));
+      const displayHeight = displayWidth * (canvas.height / canvas.width);
+      canvas.style.width = displayWidth + 'px';
+      canvas.style.height = displayHeight + 'px';
+
+      const maxZoom = Math.max(MAX_ZOOM_FLOOR, Math.min(MAX_ZOOM_CEILING, canvas.width / displayWidth));
+
+      if (pz) pz.dispose();
+      pz = panzoom(canvasWrap, {
+        maxZoom: maxZoom,
+        minZoom: 1,
+        bounds: true,
+        boundsPadding: 0.15,
+        zoomDoubleClickSpeed: 1,
+        smoothScroll: false
+      });
+
+      curMaxZoom = maxZoom;
+      curStartZoom = Math.min(INITIAL_ZOOM, maxZoom);
+      curDisplayWidth = displayWidth;
+      curDisplayHeight = displayHeight;
+      goToScale(curStartZoom);
+
+      currentPage = num;
+      pageLabel.textContent = num + '/' + pdfDoc.numPages;
+      prevBtn.disabled = num <= 1;
+      nextBtn.disabled = num >= pdfDoc.numPages;
+      setStatus('');
+    }
+
+    function setupDoubleTap() {
+      let lastTap = 0;
+      let wasMultiTouch = false;
+
+      // capture phase: fires before panzoom's own bubble-phase touch handlers
+      // can call stopPropagation and swallow the event.
+      viewport.addEventListener('touchstart', (e) => {
+        if (e.touches.length > 1) wasMultiTouch = true;
+      }, { capture: true, passive: true });
+
+      viewport.addEventListener('touchend', (e) => {
+        if (!pz || e.touches.length > 0) return; // wait until all fingers are up
+
+        const isPinchRelease = wasMultiTouch;
+        wasMultiTouch = false;
+        if (isPinchRelease) return; // don't treat pinch-zoom release as a tap
+
+        const now = Date.now();
+        if (now - lastTap < 300) {
+          const cur = pz.getTransform();
+          if (cur.scale > curStartZoom + 0.15) {
+            // returning to the starting view: recenter cleanly
+            goToScale(curStartZoom);
+          } else {
+            // zooming in further: anchor on the tapped point
+            const t = e.changedTouches[0];
+            const rect = viewport.getBoundingClientRect();
+            const x = t.clientX - rect.left;
+            const y = t.clientY - rect.top;
+            const target = Math.min(curStartZoom * 2, curMaxZoom);
+            pz.smoothZoom(x, y, target / cur.scale);
+          }
+          lastTap = 0;
+        } else {
+          lastTap = now;
+        }
+      }, { capture: true, passive: true });
+    }
+    setupDoubleTap();
+
+    resetBtn.onclick = () => {
+      if (!pz) return;
+      goToScale(1);
+    };
+    prevBtn.onclick = () => { if (currentPage > 1) renderPage(currentPage - 1); };
+    nextBtn.onclick = () => { if (currentPage < pdfDoc.numPages) renderPage(currentPage + 1); };
+
+    (async function init() {
+      if (!params.get('pdf')) {
+        setStatus('불러올 도면이 지정되지 않았습니다.');
+        return;
+      }
+      try {
+        setStatus('PDF 불러오는 중...');
+        pdfDoc = await pdfjsLib.getDocument(PDF_URL).promise;
+        await renderPage(1);
+      } catch (err) {
+        setStatus('불러오기 실패: ' + err.message);
+        console.error(err);
+      }
+    })();
+
+    let resizeTimer = null;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => renderPage(currentPage), 200);
+    });
+  </script>
+</body>
+</html>
