@@ -35,12 +35,97 @@
     position: absolute; top: 52px; left: 0; right: 0; bottom: 0;
     overflow: hidden; touch-action: none; background: #2b2b2b;
   }
-  #canvasWrap { transform-origin: 0 0; }
+  #canvasWrap { position: relative; transform-origin: 0 0; }
   canvas { display: block; background: #fff; box-shadow: 0 0 12px rgba(0,0,0,.5); }
   #status {
     position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
     color: #ccc; font-size: 15px; z-index: 5;
   }
+  .hlBox {
+    position: absolute; pointer-events: none;
+    border-radius: 2px;
+    background: rgba(255,77,79,.22);
+    z-index: 3;
+    animation: hlpulse .9s ease-out 3;
+  }
+  /* size/position are set inline per-highlight (see focusOnBboxes) so the gap
+     stays a constant size on screen no matter how far zoomed in — this box
+     lives inside canvasWrap, which panzoom scales, so a plain CSS px value
+     here would balloon into a huge block at high zoom. */
+  @keyframes hlpulse {
+    0% { background: rgba(255,77,79,.55); }
+    100% { background: rgba(255,77,79,.22); }
+  }
+  #sheetBackdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,.5);
+    display: none; z-index: 20;
+  }
+  #sheet {
+    position: fixed; left: 0; right: 0; bottom: 0; max-height: 70vh;
+    background: #222; border-radius: 14px 14px 0 0; z-index: 21;
+    transform: translateY(100%); transition: transform .2s ease-out;
+    display: flex; flex-direction: column;
+  }
+  #sheet.open { transform: translateY(0); }
+  #sheetBackdrop.open { display: block; }
+  #sheetHead {
+    padding: 14px 16px 10px; border-bottom: 1px solid #333;
+    display: flex; align-items: center; justify-content: space-between;
+    flex-shrink: 0;
+  }
+  #sheetHead h2 { font-size: 15px; margin: 0; }
+  #sheetHead .count { font-size: 12px; color: #999; }
+  #sheetClose {
+    background: #3a3a3a; color: #eee; border: none; border-radius: 6px;
+    width: 32px; height: 32px; font-size: 16px;
+  }
+  #sheetList { overflow-y: auto; padding: 10px 12px 20px; }
+  .sheetGroup { margin-bottom: 10px; }
+  .sheetGroup .groupTitle {
+    font-size: 12px; color: #999; padding: 6px 6px 4px;
+  }
+  .sheetItem {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; background: #2a2a2a; border: 1px solid #333; border-radius: 10px;
+    padding: 12px 14px; margin-bottom: 6px; text-align: left; width: 100%;
+    color: #eee; font-family: inherit;
+  }
+  .sheetItem.current { border-color: #555; opacity: .55; }
+  .sheetItem .main { font-size: 14px; font-weight: 600; }
+  .sheetItem .sub { font-size: 12px; color: #999; margin-top: 2px; }
+  .sheetItem .arrow { font-size: 16px; color: #777; flex-shrink: 0; }
+  #searchOverlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 22;
+    display: none; align-items: flex-start; justify-content: center;
+    padding-top: 18vh;
+  }
+  #searchOverlay.open { display: flex; }
+  #searchBox {
+    background: #222; border-radius: 12px; padding: 14px; width: min(90vw, 360px);
+  }
+  #searchBox input {
+    width: 100%; box-sizing: border-box; background: #333; border: 1px solid #444;
+    color: #eee; border-radius: 8px; padding: 10px 12px; font-size: 15px;
+  }
+  #searchBox .row { display: flex; gap: 8px; margin-top: 10px; }
+  #searchBox button {
+    flex: 1; background: #3a3a3a; color: #eee; border: none; border-radius: 8px;
+    padding: 10px; font-size: 14px;
+  }
+  #searchBox button.primary { background: #3d6bff; }
+  #searchSuggestions {
+    display: none; max-height: 46vh; overflow-y: auto; margin-top: 8px;
+    border-top: 1px solid #333; padding-top: 8px;
+  }
+  .suggestItem {
+    width: 100%; box-sizing: border-box; display: flex; align-items: center;
+    justify-content: space-between; gap: 8px; background: none; border: none;
+    color: #eee; text-align: left; padding: 9px 6px; font-size: 14px;
+    border-radius: 6px; font-family: inherit;
+  }
+  .suggestItem:active { background: #333; }
+  .suggestItem .suggestText { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .suggestItem .suggestCount { font-size: 11px; color: #888; flex-shrink: 0; }
 </style>
 </head>
 <body>
@@ -53,12 +138,36 @@
     </div>
     <div id="title"></div>
     <div class="group">
+      <button id="searchBtn">🔍</button>
       <button id="resetBtn">⤢</button>
     </div>
   </div>
   <div id="viewport">
     <div id="status">불러오는 중...</div>
-    <div id="canvasWrap"><canvas id="pdfCanvas"></canvas></div>
+    <div id="canvasWrap"><canvas id="pdfCanvas"></canvas><div id="highlightLayer"></div></div>
+  </div>
+
+  <div id="sheetBackdrop"></div>
+  <div id="sheet">
+    <div id="sheetHead">
+      <div>
+        <h2 id="sheetTitle">신호</h2>
+        <div class="count" id="sheetCount"></div>
+      </div>
+      <button id="sheetClose">✕</button>
+    </div>
+    <div id="sheetList"></div>
+  </div>
+
+  <div id="searchOverlay">
+    <div id="searchBox">
+      <input id="searchInput" placeholder="신호/라벨 이름 (예: BB1, SPG_1)" autocomplete="off">
+      <div id="searchSuggestions"></div>
+      <div class="row">
+        <button id="searchCancel">취소</button>
+        <button id="searchGo" class="primary">검색</button>
+      </div>
+    </div>
   </div>
 
   <script src="vendor/pdf.min.js"></script>
@@ -70,6 +179,17 @@
     const PDF_URL = './' + (params.get('pdf') || '');
     const TITLE = params.get('title') || '';
     const TARGET_PIXEL_BUDGET = 64_000_000; // total canvas pixels per page, high-res for crisp zoom
+    // Very old mobile browsers cap a single canvas/GPU texture around 4096px
+    // per side; asking for more can silently fail to render or hang instead
+    // of erroring. 4096 turned out too soft for these dense CAD drawings
+    // (small labels need real resolution to stay legible when zoomed), so
+    // this is a middle ground — still well short of the ~9500px an A0 sheet
+    // would hit under TARGET_PIXEL_BUDGET alone, but sharper than 4096.
+    // Combined with capping how many rendered pages we keep cached (see
+    // pageCache below), this should be lighter on memory than the original
+    // uncapped version while looking much closer to it.
+    const MAX_CANVAS_DIMENSION = 8192;
+    const MAX_CACHED_PAGES = 3; // evict oldest full-res page bitmap beyond this
     const MAX_ZOOM_FLOOR = 10;
     const MAX_ZOOM_CEILING = 30;
     const INITIAL_ZOOM = 1; // zoom level shown right after loading a page (1 = fit to screen)
@@ -86,6 +206,19 @@
     const prevBtn = document.getElementById('prevBtn');
     const nextBtn = document.getElementById('nextBtn');
     const resetBtn = document.getElementById('resetBtn');
+    const searchBtn = document.getElementById('searchBtn');
+    const highlightLayer = document.getElementById('highlightLayer');
+    const sheetBackdrop = document.getElementById('sheetBackdrop');
+    const sheet = document.getElementById('sheet');
+    const sheetTitle = document.getElementById('sheetTitle');
+    const sheetCount = document.getElementById('sheetCount');
+    const sheetList = document.getElementById('sheetList');
+    const sheetClose = document.getElementById('sheetClose');
+    const searchOverlay = document.getElementById('searchOverlay');
+    const searchInput = document.getElementById('searchInput');
+    const searchGo = document.getElementById('searchGo');
+    const searchCancel = document.getElementById('searchCancel');
+    const searchSuggestions = document.getElementById('searchSuggestions');
 
     let pdfDoc = null;
     let currentPage = 1;
@@ -95,7 +228,48 @@
     let curStartZoom = 1.8;
     let curDisplayWidth = 0;
     let curDisplayHeight = 0;
-    const pageCache = new Map(); // pageNum -> { width, height, bitmap }
+    let curPageWidthPDF = 0;
+    let curPageHeightPDF = 0;
+    const pageCache = new Map(); // pageNum -> { width, height, bitmap, pdfW, pdfH }
+
+    // --- 도면 간 신호/라벨 상호참조 (signal cross-reference) ---
+    const CURRENT_FILE = params.get('pdf') || '';
+    const DIAGRAM_TITLES = {
+      '3238_KBS_HDTV2_RACK-LAYOUT_POWER_CALC_D01.pdf': 'Rack Layout',
+      '3238_KBS_VID_DIAG_D03.pdf': 'Video',
+      '3238_KBS_AUD_DIAG_D01.pdf': 'Audio',
+      '3238_KBS_CTRL_DIAG_D01.pdf': 'Control',
+      '3238_VIDEO-JF_D01-S.1-DIN_A1.pdf': 'Video-JF',
+      '3238_RF-JF_D1-SHEET-1_DIN_A2.pdf': 'RF-JF',
+      '3238_ANT-JF_D01-SHEET-1_DIN_A2.pdf': 'ANT-JF',
+      '3238_AJF_D01-S.1-DIN_A0.pdf': 'AJF',
+      '3238_EXT-IO_D01_DIN_A0.pdf': 'EXT-IO',
+      '3238_TIE-IO_D03-SHEET1_DIN_A0.pdf': 'TIE-IO',
+      '3238_CTRL-PP_D01-S.1-DIN_A2.pdf': 'CTRL-PP',
+      '3238_LAYOUT-RF-MIC_D01-DIN_A2.pdf': 'RF-MIC Layout',
+    };
+    function titleFor(file) { return DIAGRAM_TITLES[file] || file; }
+    function normalizeLabel(text) {
+      return (text || '').replace(/[\s_\-./]+/g, '').toUpperCase();
+    }
+
+    let signalIndex = null;      // raw array from signal_index.json
+    let labelsByPage = new Map();// "file|page" -> [{text,norm,bbox}]
+    let occurrencesByNorm = new Map(); // norm -> [{file,page,text,bbox}]
+    let pendingHighlight = null; // bbox from URL, applied after first render
+
+    fetch('signal_index.json').then(r => r.ok ? r.json() : null).then(data => {
+      if (!data) return;
+      signalIndex = data;
+      for (const pg of data) {
+        labelsByPage.set(pg.file + '|' + pg.page, pg.labels);
+        for (const lb of pg.labels) {
+          const norm = lb.norm;
+          if (!occurrencesByNorm.has(norm)) occurrencesByNorm.set(norm, []);
+          occurrencesByNorm.get(norm).push({ file: pg.file, page: pg.page, text: lb.text, bbox: lb.bbox });
+        }
+      }
+    }).catch(() => { /* 상호참조 인덱스 없이도 기본 뷰어는 동작 */ });
 
     function goToScale(scale) {
       pz.zoomAbs(0, 0, scale);
@@ -119,13 +293,17 @@
         canvas.width = cached.width;
         canvas.height = cached.height;
         ctx.drawImage(cached.bitmap, 0, 0);
+        curPageWidthPDF = cached.pdfW;
+        curPageHeightPDF = cached.pdfH;
       } else {
         setStatus('페이지 ' + num + ' 렌더링 중...');
         const page = await pdfDoc.getPage(num);
         if (myToken !== renderToken) return;
 
         const baseViewport = page.getViewport({ scale: 1 });
-        const renderScale = Math.sqrt(TARGET_PIXEL_BUDGET / (baseViewport.width * baseViewport.height));
+        const budgetScale = Math.sqrt(TARGET_PIXEL_BUDGET / (baseViewport.width * baseViewport.height));
+        const dimensionScale = MAX_CANVAS_DIMENSION / Math.max(baseViewport.width, baseViewport.height);
+        const renderScale = Math.min(budgetScale, dimensionScale);
         const pdfViewport = page.getViewport({ scale: renderScale });
 
         canvas.width = Math.floor(pdfViewport.width);
@@ -138,7 +316,15 @@
         snap.width = canvas.width;
         snap.height = canvas.height;
         snap.getContext('2d').drawImage(canvas, 0, 0);
-        pageCache.set(num, { width: canvas.width, height: canvas.height, bitmap: snap });
+        curPageWidthPDF = baseViewport.width;
+        curPageHeightPDF = baseViewport.height;
+        pageCache.set(num, { width: canvas.width, height: canvas.height, bitmap: snap, pdfW: baseViewport.width, pdfH: baseViewport.height });
+        // These are full-resolution bitmaps (tens of MB each at this budget) —
+        // cap how many stick around so browsing several pages in one session
+        // doesn't quietly balloon memory on a phone. Oldest goes first.
+        while (pageCache.size > MAX_CACHED_PAGES) {
+          pageCache.delete(pageCache.keys().next().value);
+        }
       }
 
       // fit-to-width display size
@@ -170,11 +356,273 @@
       prevBtn.disabled = num <= 1;
       nextBtn.disabled = num >= pdfDoc.numPages;
       setStatus('');
+
+      if (pendingHighlight && pendingHighlight.page === num) {
+        // If the index knows about other spots for this same label on this
+        // same page, light all of them up together instead of just the one
+        // that was clicked.
+        let bboxes = [pendingHighlight.bbox];
+        if (pendingHighlight.norm && occurrencesByNorm.has(pendingHighlight.norm)) {
+          const samePage = occurrencesByNorm.get(pendingHighlight.norm)
+            .filter(o => o.file === CURRENT_FILE && o.page === num)
+            .map(o => o.bbox);
+          if (samePage.length) bboxes = samePage;
+        }
+        focusOnBboxes(bboxes);
+        pendingHighlight = null;
+      } else {
+        clearHighlights();
+      }
     }
+
+    function clearHighlights() {
+      highlightLayer.innerHTML = '';
+    }
+
+    // --- 하이라이트: PDF 좌표 bbox 목록을 현재 화면 배율에 맞게 한번에 표시하고 그 위치로 이동 ---
+    function focusOnBboxes(bboxList) {
+      if (!pz || !curPageWidthPDF || !curPageHeightPDF || !bboxList || !bboxList.length) return;
+      const boxes = bboxList.map(([x0, y0, x1, y1]) => ({
+        dx0: x0 / curPageWidthPDF * curDisplayWidth,
+        dy0: y0 / curPageHeightPDF * curDisplayHeight,
+        dx1: x1 / curPageWidthPDF * curDisplayWidth,
+        dy1: y1 / curPageHeightPDF * curDisplayHeight,
+      }));
+      const overallX0 = Math.min(...boxes.map(b => b.dx0));
+      const overallY0 = Math.min(...boxes.map(b => b.dy0));
+      const overallX1 = Math.max(...boxes.map(b => b.dx1));
+      const overallY1 = Math.max(...boxes.map(b => b.dy1));
+      const cx = (overallX0 + overallX1) / 2;
+      const cy = (overallY0 + overallY1) / 2;
+
+      let targetZoom;
+      if (boxes.length === 1) {
+        // Single spot: zoom all the way in to the canvas's native resolution
+        // so small CAD labels are actually legible, not just "found".
+        targetZoom = curMaxZoom;
+      } else {
+        // Multiple spots at once: zoom just enough to fit the whole cluster
+        // on screen, clamped to the page's normal fit/native-resolution range.
+        const fitPadPx = 40;
+        const spanW = overallX1 - overallX0 + fitPadPx * 2;
+        const spanH = overallY1 - overallY0 + fitPadPx * 2;
+        const fitZoom = Math.min(viewport.clientWidth / spanW, viewport.clientHeight / spanH);
+        targetZoom = Math.min(curMaxZoom, Math.max(curStartZoom, fitZoom));
+      }
+
+      // Highlight boxes live inside canvasWrap, which panzoom visually scales
+      // by targetZoom — so a plain "5px" gap would render targetZoom times
+      // bigger on screen (huge at 10-30x zoom). Dividing by targetZoom cancels
+      // that out, keeping the gap a constant size no matter how far we zoom in.
+      const screenGapPx = 5;
+      const pad = screenGapPx / targetZoom;
+      clearHighlights();
+      for (const b of boxes) {
+        const el = document.createElement('div');
+        el.className = 'hlBox';
+        el.style.left = (b.dx0 - pad) + 'px';
+        el.style.top = (b.dy0 - pad) + 'px';
+        el.style.width = (b.dx1 - b.dx0 + pad * 2) + 'px';
+        el.style.height = (b.dy1 - b.dy0 + pad * 2) + 'px';
+        highlightLayer.appendChild(el);
+      }
+
+      // Set scale/position directly on the (live) transform object, then let
+      // moveTo() do bounds-clamping + repaint scheduling.
+      const t = pz.getTransform();
+      t.scale = targetZoom;
+      const targetX = viewport.clientWidth / 2 - cx * targetZoom;
+      const targetY = viewport.clientHeight / 2 - cy * targetZoom;
+      pz.moveTo(targetX, targetY);
+    }
+
+    // 현재 페이지에서 pdf 좌표(px,py) 지점에 있는 라벨 찾기 (약간의 여유 패딩 포함)
+    function findLabelAt(px, py) {
+      const labels = labelsByPage.get(CURRENT_FILE + '|' + currentPage);
+      if (!labels) return null;
+      const padPdf = 6;
+      let best = null, bestArea = Infinity;
+      for (const lb of labels) {
+        const [x0, y0, x1, y1] = lb.bbox;
+        if (px >= x0 - padPdf && px <= x1 + padPdf && py >= y0 - padPdf && py <= y1 + padPdf) {
+          const area = (x1 - x0) * (y1 - y0);
+          if (area < bestArea) { bestArea = area; best = lb; }
+        }
+      }
+      return best;
+    }
+
+    function clientToPdf(clientX, clientY) {
+      const rect = viewport.getBoundingClientRect();
+      const t = pz.getTransform();
+      const localX = (clientX - rect.left - t.x) / t.scale;
+      const localY = (clientY - rect.top - t.y) / t.scale;
+      return [localX / curDisplayWidth * curPageWidthPDF, localY / curDisplayHeight * curPageHeightPDF];
+    }
+
+    function goToOccurrence(occ, norm) {
+      if (occ.file !== CURRENT_FILE) {
+        const url = new URL('viewer.html', location.href);
+        url.searchParams.set('pdf', occ.file);
+        url.searchParams.set('title', titleFor(occ.file));
+        url.searchParams.set('page', occ.page);
+        url.searchParams.set('hl', occ.bbox.join(','));
+        if (norm && norm !== '__search__') url.searchParams.set('norm', norm);
+        location.href = url.toString();
+        return;
+      }
+      closeSheet();
+      if (occ.page !== currentPage) {
+        renderPage(occ.page).then(() => focusOnBboxes([occ.bbox]));
+      } else {
+        focusOnBboxes([occ.bbox]);
+      }
+    }
+
+    function openSheet(norm, originText) {
+      const list = (occurrencesByNorm.get(norm) || []).slice().sort((a, b) => {
+        if (a.file !== b.file) return titleFor(a.file).localeCompare(titleFor(b.file), 'ko');
+        return a.page - b.page;
+      });
+      sheetTitle.textContent = originText || norm;
+      sheetCount.textContent = list.length + '곳에서 발견';
+      sheetList.innerHTML = '';
+      if (list.length === 0) {
+        const p = document.createElement('div');
+        p.className = 'sheetGroup';
+        p.textContent = '다른 도면에서 같은 라벨을 찾지 못했습니다.';
+        sheetList.appendChild(p);
+      }
+      let lastFile = null, groupEl = null;
+      for (const occ of list) {
+        if (occ.file !== lastFile) {
+          lastFile = occ.file;
+          groupEl = document.createElement('div');
+          groupEl.className = 'sheetGroup';
+          const gt = document.createElement('div');
+          gt.className = 'groupTitle';
+          gt.textContent = titleFor(occ.file);
+          groupEl.appendChild(gt);
+          sheetList.appendChild(groupEl);
+        }
+        const isCurrent = occ.file === CURRENT_FILE && occ.page === currentPage;
+        const btn = document.createElement('button');
+        btn.className = 'sheetItem' + (isCurrent ? ' current' : '');
+        const info = document.createElement('div');
+        const main = document.createElement('div');
+        main.className = 'main';
+        main.textContent = occ.text;
+        const sub = document.createElement('div');
+        sub.className = 'sub';
+        sub.textContent = occ.page + '페이지' + (isCurrent ? ' · 현재 위치' : '');
+        info.appendChild(main);
+        info.appendChild(sub);
+        const arrow = document.createElement('div');
+        arrow.className = 'arrow';
+        arrow.textContent = '›';
+        btn.appendChild(info);
+        btn.appendChild(arrow);
+        btn.onclick = () => goToOccurrence(occ, norm);
+        groupEl.appendChild(btn);
+      }
+      sheetBackdrop.classList.add('open');
+      sheet.classList.add('open');
+
+      // 같은 페이지에 여러 곳이 있으면 목록에서 하나씩 누르지 않아도 되도록
+      // 한 번에 전부 하이라이트해서 보여줌
+      const samePageOccs = list.filter(o => o.file === CURRENT_FILE && o.page === currentPage);
+      if (samePageOccs.length > 0) {
+        focusOnBboxes(samePageOccs.map(o => o.bbox));
+      } else {
+        clearHighlights();
+      }
+    }
+
+    function closeSheet() {
+      sheetBackdrop.classList.remove('open');
+      sheet.classList.remove('open');
+    }
+    sheetBackdrop.onclick = closeSheet;
+    sheetClose.onclick = closeSheet;
+
+    // 데스크톱(마우스): 더블클릭해야 라벨을 찾음 — 싱글클릭은 그냥 클릭/드래그로 남겨둠
+    // (모바일 탭은 setupDoubleTap() 안의 touchend에서 별도로 처리)
+    canvas.addEventListener('dblclick', (e) => {
+      if (!pz || !signalIndex) return;
+      const [px, py] = clientToPdf(e.clientX, e.clientY);
+      const label = findLabelAt(px, py);
+      if (label) openSheet(label.norm, label.text);
+    });
+
+    searchBtn.onclick = () => {
+      searchOverlay.classList.add('open');
+      searchInput.value = '';
+      showSuggestions('');
+      setTimeout(() => searchInput.focus(), 50);
+    };
+    searchCancel.onclick = () => searchOverlay.classList.remove('open');
+    function runSearch() {
+      const q = normalizeLabel(searchInput.value);
+      if (!q) return;
+      searchOverlay.classList.remove('open');
+      let list = occurrencesByNorm.get(q);
+      if (!list) {
+        // 정확히 일치하는 라벨이 없으면 부분 일치로 폭넓게 탐색
+        list = [];
+        for (const [norm, occs] of occurrencesByNorm) {
+          if (norm.includes(q)) list.push(...occs);
+        }
+      }
+      occurrencesByNorm.set('__search__', list);
+      openSheet('__search__', searchInput.value.trim());
+    }
+    searchGo.onclick = runSearch;
+    searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') runSearch(); });
+
+    // 입력하는 동안 라벨 자동완성 목록 표시 (예: "EXT" -> EXT-IO-A, EXT REF, ...)
+    function showSuggestions(rawQuery) {
+      const q = normalizeLabel(rawQuery);
+      searchSuggestions.innerHTML = '';
+      if (!q) { searchSuggestions.style.display = 'none'; return; }
+      const matches = [];
+      for (const norm of occurrencesByNorm.keys()) {
+        if (norm === '__search__') continue;
+        if (norm.includes(q)) matches.push(norm);
+      }
+      matches.sort((a, b) => {
+        const aStarts = a.startsWith(q), bStarts = b.startsWith(q);
+        if (aStarts !== bStarts) return aStarts ? -1 : 1;
+        if (a.length !== b.length) return a.length - b.length;
+        return a.localeCompare(b);
+      });
+      const top = matches.slice(0, 40);
+      if (top.length === 0) { searchSuggestions.style.display = 'none'; return; }
+      searchSuggestions.style.display = 'block';
+      for (const norm of top) {
+        const occs = occurrencesByNorm.get(norm);
+        const btn = document.createElement('button');
+        btn.className = 'suggestItem';
+        const main = document.createElement('span');
+        main.className = 'suggestText';
+        main.textContent = occs[0].text;
+        const count = document.createElement('span');
+        count.className = 'suggestCount';
+        count.textContent = occs.length + '곳';
+        btn.appendChild(main);
+        btn.appendChild(count);
+        btn.onclick = () => {
+          searchOverlay.classList.remove('open');
+          openSheet(norm, occs[0].text);
+        };
+        searchSuggestions.appendChild(btn);
+      }
+    }
+    searchInput.addEventListener('input', () => showSuggestions(searchInput.value));
 
     function setupDoubleTap() {
       let lastTap = 0;
       let wasMultiTouch = false;
+      let singleTapTimer = null;
 
       // capture phase: fires before panzoom's own bubble-phase touch handlers
       // can call stopPropagation and swallow the event.
@@ -191,6 +639,7 @@
 
         const now = Date.now();
         if (now - lastTap < 300) {
+          if (singleTapTimer) { clearTimeout(singleTapTimer); singleTapTimer = null; } // 라벨 찾기 취소, 확대로 처리
           const cur = pz.getTransform();
           if (cur.scale > curStartZoom + 0.15) {
             // returning to the starting view: recenter cleanly
@@ -207,6 +656,16 @@
           lastTap = 0;
         } else {
           lastTap = now;
+          // 싱글탭: 두 번째 탭이 안 오면 그 지점의 라벨을 찾아 상호참조 목록 표시
+          const touch = e.changedTouches[0];
+          const clientX = touch.clientX, clientY = touch.clientY;
+          singleTapTimer = setTimeout(() => {
+            singleTapTimer = null;
+            if (!pz || !signalIndex) return;
+            const [px, py] = clientToPdf(clientX, clientY);
+            const label = findLabelAt(px, py);
+            if (label) openSheet(label.norm, label.text);
+          }, 300);
         }
       }, { capture: true, passive: true });
     }
@@ -227,7 +686,15 @@
       try {
         setStatus('PDF 불러오는 중...');
         pdfDoc = await pdfjsLib.getDocument(PDF_URL).promise;
-        await renderPage(1);
+        const startPage = Math.min(Math.max(1, parseInt(params.get('page'), 10) || 1), pdfDoc.numPages);
+        const hlParam = params.get('hl');
+        if (hlParam) {
+          const parts = hlParam.split(',').map(Number);
+          if (parts.length === 4 && parts.every(n => !isNaN(n))) {
+            pendingHighlight = { page: startPage, bbox: parts, norm: params.get('norm') || null };
+          }
+        }
+        await renderPage(startPage);
       } catch (err) {
         setStatus('불러오기 실패: ' + err.message);
         console.error(err);
