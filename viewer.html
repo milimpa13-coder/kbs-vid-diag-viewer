@@ -28,6 +28,7 @@
     text-decoration: none;
   }
   #bar button:disabled { opacity: .35; }
+  #findModeBtn.active { background: #3d6bff; }
   #pageLabel { font-size: 14px; min-width: 52px; text-align: center; }
   #title { font-size: 13px; color: #aaa; max-width: 32vw; overflow: hidden;
     text-overflow: ellipsis; white-space: nowrap; }
@@ -138,6 +139,7 @@
     </div>
     <div id="title"></div>
     <div class="group">
+      <button id="findModeBtn" title="탭으로 라벨 찾기 켜기/끄기">🎯</button>
       <button id="searchBtn">🔍</button>
       <button id="resetBtn">⤢</button>
     </div>
@@ -206,6 +208,7 @@
     const prevBtn = document.getElementById('prevBtn');
     const nextBtn = document.getElementById('nextBtn');
     const resetBtn = document.getElementById('resetBtn');
+    const findModeBtn = document.getElementById('findModeBtn');
     const searchBtn = document.getElementById('searchBtn');
     const highlightLayer = document.getElementById('highlightLayer');
     const sheetBackdrop = document.getElementById('sheetBackdrop');
@@ -257,6 +260,18 @@
     let labelsByPage = new Map();// "file|page" -> [{text,norm,bbox}]
     let occurrencesByNorm = new Map(); // norm -> [{file,page,text,bbox}]
     let pendingHighlight = null; // bbox from URL, applied after first render
+
+    // 탭/더블클릭으로 라벨 찾기는 기본은 꺼둠(모바일에서 한 번 터치할 때마다
+    // 찾기 결과가 뜨는 게 거슬린다는 피드백) — 이 토글을 켰을 때만 동작.
+    let findModeOn = false;
+    function updateFindModeUI() {
+      findModeBtn.classList.toggle('active', findModeOn);
+    }
+    findModeBtn.onclick = () => {
+      findModeOn = !findModeOn;
+      updateFindModeUI();
+    };
+    updateFindModeUI();
 
     fetch('signal_index.json').then(r => r.ok ? r.json() : null).then(data => {
       if (!data) return;
@@ -548,7 +563,7 @@
     // 데스크톱(마우스): 더블클릭해야 라벨을 찾음 — 싱글클릭은 그냥 클릭/드래그로 남겨둠
     // (모바일 탭은 setupDoubleTap() 안의 touchend에서 별도로 처리)
     canvas.addEventListener('dblclick', (e) => {
-      if (!pz || !signalIndex) return;
+      if (!findModeOn || !pz || !signalIndex) return;
       const [px, py] = clientToPdf(e.clientX, e.clientY);
       const label = findLabelAt(px, py);
       if (label) openSheet(label.norm, label.text);
@@ -657,15 +672,18 @@
         } else {
           lastTap = now;
           // 싱글탭: 두 번째 탭이 안 오면 그 지점의 라벨을 찾아 상호참조 목록 표시
-          const touch = e.changedTouches[0];
-          const clientX = touch.clientX, clientY = touch.clientY;
-          singleTapTimer = setTimeout(() => {
-            singleTapTimer = null;
-            if (!pz || !signalIndex) return;
-            const [px, py] = clientToPdf(clientX, clientY);
-            const label = findLabelAt(px, py);
-            if (label) openSheet(label.norm, label.text);
-          }, 300);
+          // (🎯 찾기 모드가 켜져 있을 때만 — 꺼져 있으면 그냥 평범한 탭)
+          if (findModeOn) {
+            const touch = e.changedTouches[0];
+            const clientX = touch.clientX, clientY = touch.clientY;
+            singleTapTimer = setTimeout(() => {
+              singleTapTimer = null;
+              if (!pz || !signalIndex) return;
+              const [px, py] = clientToPdf(clientX, clientY);
+              const label = findLabelAt(px, py);
+              if (label) openSheet(label.norm, label.text);
+            }, 300);
+          }
         }
       }, { capture: true, passive: true });
     }
