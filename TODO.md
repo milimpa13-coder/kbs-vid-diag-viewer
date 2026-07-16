@@ -4,9 +4,12 @@ KBS 3238 TV-2 도면(PDF)을 모바일에서 보기 위한 정적 웹 뷰어.
 빌드 시스템 없이 순수 HTML/CSS/JS + pdf.js, panzoom(vendor) 조합으로 동작.
 
 ## 구조
-- `index.html` — 메인 메뉴 (Rack Layout / Video / Audio / Connection Panels / Control)
-- `connections.html` — Connection Panels 하위 메뉴 (Video-JF, RF-JF, ANT-JF, AJF, EXT-IO, TIE-IO, CTRL-PP, RF-MIC Layout)
-- `viewer.html` — 공통 PDF 뷰어 (쿼리스트링 `?pdf=&title=`로 특정 파일 오픈, `page=`/`hl=`로 특정 페이지·영역 하이라이트 오픈)
+- `index.html` — **최상위** 메인 메뉴, 3개 카드만: TV-2 도면 / 물품 현황 / 계정 정보
+- `diagrams.html` — TV-2 도면 목록 (Rack Layout / Video / Audio / Connection Panels / Control) — 예전 index.html 내용을 그대로 옮긴 것
+- `connections.html` — Connection Panels 하위 메뉴 (Video-JF, RF-JF, ANT-JF, AJF, EXT-IO, TIE-IO, CTRL-PP, RF-MIC Layout), 뒤로가기는 `diagrams.html`로
+- `viewer.html` — 공통 PDF 뷰어 (쿼리스트링 `?pdf=&title=`로 특정 파일 오픈, `page=`/`hl=`로 특정 페이지·영역 하이라이트 오픈), 🏠 홈 버튼은 `diagrams.html`로 이동
+- `inventory.html` — 물품 현황(Cable Drum, Cam 커버 등 재고) 관리 페이지, 아래 참고
+- `accounts.html` — 계정 정보(장비/서비스 아이디·비밀번호) 관리 페이지, 아래 참고
 - `signal_index.json` — 전 도면 텍스트 라벨 인덱스 (`tools/build_signal_index.py`로 생성, 아래 참고)
 - `tools/build_signal_index.py` — PDF에서 라벨+좌표를 추출해 `signal_index.json`을 만드는 빌드 스크립트 (pymupdf 필요, `pip install pymupdf`)
 - `vendor/` — pdf.min.js, pdf.worker.min.js, panzoom.min.js
@@ -32,6 +35,10 @@ KBS 3238 TV-2 도면(PDF)을 모바일에서 보기 위한 정적 웹 뷰어.
 - [x] **한 페이지에 같은 라벨이 여러 곳 있으면 한 번에 모두 하이라이트**: 기존엔 하이라이트 박스가 하나뿐이라 목록에서 하나씩 눌러야 다음 위치를 볼 수 있었음. `#highlightBox` 단일 요소를 `#highlightLayer` 컨테이너 + `.hlBox` 여러 개로 바꾸고, 검색/탭으로 목록(`openSheet`)이 열릴 때 현재 페이지에 있는 occurrence를 전부 모아 `focusOnBboxes()`로 한 번에 표시(여러 개면 전부 화면에 들어오도록 줌을 자동으로 맞춤). 목록의 특정 항목을 클릭하면 그 한 곳만 최대 배율로 확대. 다른 파일로 넘어갈 때도 `norm` 값을 URL에 같이 넘겨서, 도착한 페이지에 같은 라벨이 여러 곳 있으면 거기서도 전부 하이라이트되게 함.
 - [x] (검토 후 폐기) BB1 신호 경로를 박스+화살표로 수작업 큐레이션하는 방식(`trace-bb1.html`)도 만들어 검색+점프 방식과 비교했으나, 신호 하나하나 수작업 조사가 필요해 확장성이 없다고 판단 → **검색+점프 방식 하나로 통일하기로 결정**하고 데모 페이지는 제거함.
 - [x] **🎯 찾기 모드 토글 추가**: 모바일에서 화면을 한 번 터치할 때마다 라벨 찾기 결과가 떠서 불편하다는 피드백 → 기본값을 꺼둔 상태(`findModeOn = false`)로 바꾸고, 상단 바에 🎯 토글 버튼을 추가해서 켰을 때만 탭(모바일)/더블클릭(데스크톱)이 라벨을 찾도록 함. 🔍 수동 검색 버튼은 토글 상태와 무관하게 항상 동작.
+- [x] **물품 현황 페이지 (`inventory.html`)**: 처음엔 카테고리+카드 방식으로 만들었다가, 사용자가 실제 표 이미지를 주면서 표 형태로 바꿔달라고 해서 `accounts.html`과 같은 표 스타일(카테고리/규격/수량/비고 4열, 가로 스크롤)로 재작성. 시드 데이터: cable drum(10×5, 30×5, 50×5, 100×15, 100×4[발전차], 200×14), cam 커버(efp rain/efp full/standard rain/standard full, 수량 미정이라 0으로 시작). 수량은 +/− 버튼 또는 직접 입력, 카테고리별 합계를 상단에 자동 표시. 행 추가/삭제 가능. **`localStorage`에만 저장** — 서버/DB가 없는 정적 사이트라 이 브라우저(이 기기)에만 남고 다른 사람과는 공유되지 않음. 여러 사람이 같이 보고 수정해야 하면 별도 백엔드(구글시트 연동 등)가 필요 — 지금은 범위 밖.
+- [x] **첫 화면을 3분류로 재구성**: `index.html`을 "TV-2 도면 / 물품 현황 / 계정 정보" 3개 카드만 있는 최상위 메뉴로 바꾸고, 기존 도면 목록은 `diagrams.html`로 옮김. `connections.html` 뒤로가기와 `viewer.html`의 🏠 버튼은 `diagrams.html`을 가리키도록 수정(도면 보다가 홈 누르면 도면 목록으로 돌아오는 게 자연스러워서).
+- [x] 계정 정보 표에 **검색창** 추가(장비명/ID 기준 실시간 필터링, 몇 건 표시 중인지 카운트 표시) 및 **PW 기본 표시**로 변경(로컬 전용이라 마스킹 불필요하다는 판단, 👁 버튼으로 숨기는 것도 여전히 가능).
+- [x] **계정 정보 페이지 (`accounts.html`)를 표 형태로 재작성**: 카테고리+카드 방식 대신 장비명/ID/PW 3열 표(가로 스크롤, `.tableWrap { overflow-x:auto }`)로 변경. **사용자가 실제 장비 계정/비밀번호 36건을 표 이미지로 제공해서 그대로 시드 데이터에 넣음** (MADI-RTR, UPS, NAS, EVS, V-RTR 등). PW는 기본 마스킹, 행마다 👁 버튼으로 토글. ⚠️ **이 저장소는 public이라 이 실제 비밀번호들이 GitHub에 그대로 노출된다는 점을 사용자에게 명확히 알리고 확인까지 받은 뒤 진행함** (private 전환 등 대안 제시했으나 사용자가 "그냥 public에 넣어달라"고 명시적으로 선택). `localStorage`에도 계속 저장되므로 이후 수정 내용은 기기별로 남음.
 
 ## 신호 상호참조 관련 중요 메모 (다음에 이어서 작업할 때 필수로 알아야 할 것)
 - CAD에서 내보낸 이 PDF들은 페이지 회전(rotation 90/270도)이 걸려 있음. PyMuPDF의 `page.get_text('words')` 좌표는 **회전이 적용되지 않은 원본 좌표계**라서, 화면에 실제 렌더링되는(=pdf.js가 보여주는) 좌표와 다름. 반드시 `fitz.Rect(...) * page.rotation_matrix`로 변환해야 함. (`tools/build_signal_index.py`의 `extract_labels()`에 이미 반영됨 — 이 로직 건드릴 때 절대 빼먹지 말 것. 한 번 이 버그로 하이라이트가 완전히 엉뚱한 곳에 찍혔던 적 있음.)

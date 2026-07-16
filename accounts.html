@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>계정 정보</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; min-height: 100%;
+    background: #1b1b1b; color: #eee;
+    font-family: -apple-system, "Malgun Gothic", sans-serif;
+  }
+  header {
+    padding: 20px 20px 8px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  header a.back {
+    background: #3a3a3a; color: #eee; border-radius: 8px;
+    width: 36px; height: 36px; display: flex; align-items: center;
+    justify-content: center; text-decoration: none; font-size: 18px;
+    flex-shrink: 0;
+  }
+  header h1 { font-size: 18px; margin: 0; }
+  header p { font-size: 12px; color: #999; margin: 2px 0 0; }
+  #resetBtn {
+    margin-left: auto; background: none; color: #888; border: none;
+    font-size: 12px; text-decoration: underline; padding: 6px;
+    flex-shrink: 0;
+  }
+  #main { padding: 8px 16px 40px; }
+  #searchBox {
+    margin-bottom: 10px;
+  }
+  #searchInput {
+    width: 100%; box-sizing: border-box; background: #262626; border: 1px solid #3a3a3a;
+    color: #eee; border-radius: 8px; padding: 10px 12px; font-size: 14px;
+    font-family: inherit;
+  }
+  #searchCount { font-size: 11.5px; color: #888; margin: 6px 4px 0; }
+  .tableWrap {
+    overflow-x: auto; border: 1px solid #333; border-radius: 12px;
+    background: #232323;
+  }
+  table { border-collapse: collapse; width: 100%; }
+  th, td {
+    padding: 6px 8px; border-bottom: 1px solid #303030; text-align: left;
+    white-space: nowrap;
+  }
+  th {
+    font-size: 11.5px; color: #999; font-weight: 600; position: sticky; top: 0;
+    background: #262626;
+  }
+  tr:last-child td { border-bottom: none; }
+  td input {
+    background: none; border: none; color: #eee; font-family: inherit;
+    font-size: 13px; padding: 5px 4px; border-radius: 5px; width: 100%;
+    box-sizing: border-box;
+  }
+  td input:focus { background: #1e1e1e; outline: 1px solid #555; }
+  .nameCell input { min-width: 190px; font-weight: 600; }
+  .idCell input { min-width: 90px; }
+  .pwCell { min-width: 130px; }
+  .pwWrap { display: flex; align-items: center; gap: 4px; }
+  .pwWrap input { min-width: 80px; }
+  .pwToggle {
+    flex-shrink: 0; width: 26px; height: 26px; background: #3a3a3a; border: none;
+    border-radius: 5px; color: #eee; font-size: 12px;
+  }
+  .delBtn {
+    background: none; border: none; color: #666; font-size: 15px; padding: 2px 8px;
+  }
+  #addRowBtn {
+    width: 100%; background: none; border: 1px dashed #444; color: #999;
+    border-radius: 8px; padding: 10px; font-size: 13px; font-family: inherit;
+    margin-top: 12px;
+  }
+  #addRowBtn:active { background: #2a2a2a; }
+</style>
+</head>
+<body>
+  <header>
+    <a class="back" href="index.html">‹</a>
+    <div>
+      <h1>계정 정보</h1>
+      <p>이 기기 브라우저에만 저장됩니다 (다른 사람과 자동으로 공유되지 않음)</p>
+    </div>
+    <button id="resetBtn">기본값으로</button>
+  </header>
+  <div id="main">
+    <div id="searchBox">
+      <input id="searchInput" placeholder="검색 (장비명, ID)" autocomplete="off">
+      <div id="searchCount"></div>
+    </div>
+    <div class="tableWrap">
+      <table>
+        <thead>
+          <tr><th>장비명</th><th>ID</th><th>PW</th><th></th></tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <button id="addRowBtn">+ 행 추가</button>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'kbs_accounts_v2';
+
+    function defaultAccounts() {
+      const rows = [
+        ['MADI-RTR / ETHERNET', 'admin', 'admin'],
+        ['SW_02', 'admin', ''],
+        ['LYNX-FR-01 / LAN', 'admin', 'lynx&admin'],
+        ['MPFS-CTRL / ETHERNET', 'admin', ''],
+        ['TC-FRAME / IE-M 10/100 BASE-T', 'admin', ''],
+        ['TB-MTX / ETH A', '', ''],
+        ['TB-MTX / ETH B', '', ''],
+        ['CCTV / LAN', 'Admin', '11111111'],
+        ['UPS_01 / LAN', 'admin', 'password'],
+        ['MPEG-DEC_01 / CTRL/DATA2', '', ''],
+        ['MPEG-DEC_02 / CTRL/DATA2', '', ''],
+        ['VCR_01 / LAN', 'admin', 'xds-pd1000'],
+        ['VCR_02 / LAN', 'admin', 'xds-pd1000'],
+        ['MPMFS_03 (IMAGINE) / CTRL ETH', 'Administrator', ''],
+        ['MPMFS_04 (IMAGINE) / CTRL ETH', 'Administrator', ''],
+        ['MPMFS_05 (IMAGINE) / CTRL ETH', 'Administrator', ''],
+        ['MPMFS_06 (IMAGINE) / CTRL ETH', 'Administrator', ''],
+        ['IP-DIC /GBE 1', 'administrator', 'evs'],
+        ['DIOS-SERVER / LAN 1 (VIA PATCH)', 'diosmaster', 'master'],
+        ['PC-ENG / LAN 1', 'ENGINEER', ''],
+        ['PC-AUD / LAN 1', 'ENGINEER', ''],
+        ['REC_01 / PRI', 'guest', 'guest'],
+        ['REC_02 / PRI', 'guest', 'guest'],
+        ['MOXA-SW_02 / PORT 6', 'su', 'root'],
+        ['SURFACE PRO / USBtoLAN', 'vmAdmin', 'vmAdmin'],
+        ['V-RTR / DOOR-PC', 's800', 's800'],
+        ['V-RTR / LIVERUNNER', 'admin', 'admin'],
+        ['V-RTR / WORKBENCH', 'admin', '1234'],
+        ['MAC PRO', '', 'VCube'],
+        ['Vcube', '', ''],
+        ['EVS(ftp)', 'evs', 'evs!'],
+        ['EVS computers', 'dvb', '(none)'],
+        ['Eaton UPS 본체 Control', '', '11111111'],
+        ['Eaton UPS 본체 Setting', '', '01010101'],
+        ['Eaton UPS 원격 모니터링 사이트', 'admin', 'Eaton@12'],
+        ['NAS(192.168.0.151:5000)', 'admin1', 'Password!1'],
+      ];
+      return rows.map(([name, account, password]) => ({ id: newId(), name, account, password }));
+    }
+
+    let idCounter = 0;
+    function newId() { return 'i' + Date.now().toString(36) + (idCounter++); }
+
+    let rows = load();
+
+    function load() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) return JSON.parse(raw);
+      } catch (e) { /* fall through to defaults */ }
+      const fresh = defaultAccounts();
+      save(fresh);
+      return fresh;
+    }
+
+    function save(data) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data || rows));
+    }
+
+    const rowsEl = document.getElementById('rows');
+    const searchInput = document.getElementById('searchInput');
+    const searchCount = document.getElementById('searchCount');
+
+    function matchesQuery(row, q) {
+      if (!q) return true;
+      return (row.name || '').toLowerCase().includes(q) ||
+        (row.account || '').toLowerCase().includes(q);
+    }
+
+    function render() {
+      const q = searchInput.value.trim().toLowerCase();
+      const visible = rows.filter(row => matchesQuery(row, q));
+      rowsEl.innerHTML = '';
+      for (const row of visible) {
+        rowsEl.appendChild(renderRow(row));
+      }
+      searchCount.textContent = q ? (visible.length + ' / ' + rows.length + '개 표시') : '';
+    }
+    searchInput.addEventListener('input', render);
+
+    function renderRow(row) {
+      const tr = document.createElement('tr');
+
+      const nameTd = document.createElement('td');
+      nameTd.className = 'nameCell';
+      const nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.value = row.name || '';
+      nameInput.oninput = () => { row.name = nameInput.value; save(); };
+      nameTd.appendChild(nameInput);
+
+      const idTd = document.createElement('td');
+      idTd.className = 'idCell';
+      const idInput = document.createElement('input');
+      idInput.type = 'text';
+      idInput.autocomplete = 'off';
+      idInput.value = row.account || '';
+      idInput.oninput = () => { row.account = idInput.value; save(); };
+      idTd.appendChild(idInput);
+
+      const pwTd = document.createElement('td');
+      pwTd.className = 'pwCell';
+      const pwWrap = document.createElement('div');
+      pwWrap.className = 'pwWrap';
+      const pwInput = document.createElement('input');
+      pwInput.type = 'text'; // 로컬 전용 페이지라 기본적으로 그냥 보이게 둠
+      pwInput.autocomplete = 'off';
+      pwInput.value = row.password || '';
+      pwInput.oninput = () => { row.password = pwInput.value; save(); };
+      const pwToggle = document.createElement('button');
+      pwToggle.className = 'pwToggle';
+      pwToggle.type = 'button';
+      pwToggle.textContent = '👁';
+      pwToggle.onclick = () => {
+        pwInput.type = pwInput.type === 'password' ? 'text' : 'password';
+      };
+      pwWrap.appendChild(pwInput);
+      pwWrap.appendChild(pwToggle);
+      pwTd.appendChild(pwWrap);
+
+      const delTd = document.createElement('td');
+      const delBtn = document.createElement('button');
+      delBtn.className = 'delBtn';
+      delBtn.textContent = '✕';
+      delBtn.onclick = () => {
+        rows = rows.filter(r => r.id !== row.id);
+        save();
+        render();
+      };
+      delTd.appendChild(delBtn);
+
+      tr.appendChild(nameTd);
+      tr.appendChild(idTd);
+      tr.appendChild(pwTd);
+      tr.appendChild(delTd);
+      return tr;
+    }
+
+    document.getElementById('addRowBtn').onclick = () => {
+      rows.push({ id: newId(), name: '', account: '', password: '' });
+      save();
+      render();
+    };
+
+    document.getElementById('resetBtn').onclick = () => {
+      if (!confirm('전체 계정 정보를 기본값으로 되돌릴까요? 지금까지 수정한 내용은 사라집니다.')) return;
+      rows = defaultAccounts();
+      save();
+      render();
+    };
+
+    render();
+  </script>
+</body>
+</html>
