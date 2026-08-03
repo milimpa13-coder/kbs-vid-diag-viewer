@@ -31,8 +31,14 @@
     flex-shrink: 0;
   }
   #main { padding: 8px 16px 40px; }
+  #searchBox { margin-bottom: 10px; }
+  #searchInput {
+    width: 100%; box-sizing: border-box; background: #262626; border: 1px solid #3a3a3a;
+    color: #eee; border-radius: 8px; padding: 10px 12px; font-size: 14px;
+    font-family: inherit;
+  }
   #totals {
-    font-size: 12px; color: #999; margin: 0 4px 10px;
+    font-size: 12px; color: #999; margin: 8px 4px 10px;
   }
   .tableWrap {
     overflow-x: auto; border: 1px solid #333; border-radius: 12px;
@@ -84,11 +90,13 @@
     <a class="back" href="inventory.html">‹</a>
     <div>
       <h1>오디오 장비</h1>
-      <p>이 기기 브라우저에만 저장됩니다 (다른 사람과 자동으로 공유되지 않음)</p>
     </div>
     <button id="resetBtn">기본값으로</button>
   </header>
   <div id="main">
+    <div id="searchBox">
+      <input id="searchInput" placeholder="검색 (장비명, 비고)" autocomplete="off">
+    </div>
     <div id="totals"></div>
     <div class="tableWrap">
       <table>
@@ -214,19 +222,31 @@
 
     const rowsEl = document.getElementById('rows');
     const totalsEl = document.getElementById('totals');
+    const searchInput = document.getElementById('searchInput');
+
+    function matchesQuery(row, q) {
+      if (!q) return true;
+      return (row.name || '').toLowerCase().includes(q) ||
+        (row.note || '').toLowerCase().includes(q);
+    }
 
     function renderTotals() {
       const total = rows.reduce((s, r) => s + (Number(r.qty) || 0), 0);
-      totalsEl.textContent = '총 ' + total + '개';
+      const q = searchInput.value.trim().toLowerCase();
+      const visibleCount = q ? rows.filter(row => matchesQuery(row, q)).length : rows.length;
+      totalsEl.textContent = '총 ' + total + '개' + (q ? ' · ' + visibleCount + ' / ' + rows.length + '개 표시' : '');
     }
 
     function render() {
+      const q = searchInput.value.trim().toLowerCase();
+      const visible = rows.filter(row => matchesQuery(row, q));
       rowsEl.innerHTML = '';
-      for (const row of rows) {
+      for (const row of visible) {
         rowsEl.appendChild(renderRow(row));
       }
       renderTotals();
     }
+    searchInput.addEventListener('input', render);
 
     function renderRow(row) {
       const tr = document.createElement('tr');
