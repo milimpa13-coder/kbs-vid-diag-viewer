@@ -153,20 +153,59 @@
     let idCounter = 0;
     function newId() { return 'i' + Date.now().toString(36) + (idCounter++); }
 
-    let rows = load();
+    // --- 구글시트 동기화 (설정 방법: GOOGLE_SHEETS_SETUP.md) ---
+    const SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycbyhxIpAWAfP1ODhuZEGEt7o2qqfBNNseVKF-NroLI6RBQmdfjY0DJz5AwNL6uE6OMk/exec';
+    const SHEETS_TOKEN = 'H4jpGkBd10Wml4NvI7knYQm6I-buAlUc';
+    const SHEET_NAME = 'accounts';
 
-    function load() {
+    async function fetchFromSheet() {
+      if (!SHEETS_API_URL) return null;
+      try {
+        const res = await fetch(SHEETS_API_URL + '?sheet=' + SHEET_NAME + '&token=' + encodeURIComponent(SHEETS_TOKEN));
+        const data = await res.json();
+        if (data.error || !Array.isArray(data.rows)) return null;
+        return data.rows.map(r => ({
+          id: newId(), name: r.name || '',
+          account: r.account != null ? String(r.account) : '',
+          password: r.password != null ? String(r.password) : ''
+        }));
+      } catch (e) {
+        console.warn('시트 불러오기 실패, 로컬 데이터로 대체', e);
+        return null;
+      }
+    }
+
+    function pushToSheet(rowsToSave) {
+      if (!SHEETS_API_URL) return;
+      // id는 클라이언트 내부 관리용일 뿐이라 시트에는 안 남김.
+      const payload = rowsToSave.map(({ name, account, password }) => ({ name, account, password }));
+      fetch(SHEETS_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // CORS 프리플라이트 회피
+        body: JSON.stringify({ sheet: SHEET_NAME, token: SHEETS_TOKEN, rows: payload }),
+      }).catch(e => console.warn('시트 저장 실패 (로컬에는 저장됨)', e));
+    }
+
+    let rows = [];
+
+    function loadLocal() {
       try {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (raw) return JSON.parse(raw);
       } catch (e) { /* fall through to defaults */ }
       const fresh = defaultAccounts();
-      save(fresh);
+      saveLocal(fresh);
       return fresh;
     }
 
-    function save(data) {
+    function saveLocal(data) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data || rows));
+    }
+
+    function save(data) {
+      const toSave = data || rows;
+      saveLocal(toSave);
+      pushToSheet(toSave);
     }
 
     const rowsEl = document.getElementById('rows');
@@ -261,7 +300,18 @@
       render();
     };
 
-    render();
+    (async function init() {
+      searchCount.textContent = '불러오는 중...';
+      const remote = await fetchFromSheet();
+      if (remote && remote.length > 0) {
+        rows = remote;
+        saveLocal(rows); // 오프라인 대비 로컬 캐시 갱신
+      } else {
+        rows = loadLocal();
+        if (remote !== null) pushToSheet(rows); // 시트는 비어있으니 기본값으로 최초 채움
+      }
+      render();
+    })();
   </script>
 </body>
 </html>

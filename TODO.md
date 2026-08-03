@@ -8,7 +8,9 @@ KBS 3238 TV-2 도면(PDF)을 모바일에서 보기 위한 정적 웹 뷰어.
 - `diagrams.html` — TV-2 도면 목록 (Rack Layout / Video / Audio / Connection Panels / Control) — 예전 index.html 내용을 그대로 옮긴 것
 - `connections.html` — Connection Panels 하위 메뉴 (Video-JF, RF-JF, ANT-JF, AJF, EXT-IO, TIE-IO, CTRL-PP, RF-MIC Layout), 뒤로가기는 `diagrams.html`로
 - `viewer.html` — 공통 PDF 뷰어 (쿼리스트링 `?pdf=&title=`로 특정 파일 오픈, `page=`/`hl=`로 특정 페이지·영역 하이라이트 오픈), 🏠 홈 버튼은 `diagrams.html`로 이동
-- `inventory.html` — 물품 현황(Cable Drum, Cam 커버 등 재고) 관리 페이지, 아래 참고
+- `inventory.html` — 물품 현황 하위 메뉴(비디오 장비 / 오디오 장비 카드 2개)
+- `inventory-video.html` — Cable Drum, Cam 커버 등 (`kbs_inventory_video_v1`)
+- `inventory-audio.html` — Audio Monitor, Mic, Speaker 등 (`kbs_inventory_audio_v1`)
 - `accounts.html` — 계정 정보(장비/서비스 아이디·비밀번호) 관리 페이지, 아래 참고
 - `signal_index.json` — 전 도면 텍스트 라벨 인덱스 (`tools/build_signal_index.py`로 생성, 아래 참고)
 - `tools/build_signal_index.py` — PDF에서 라벨+좌표를 추출해 `signal_index.json`을 만드는 빌드 스크립트 (pymupdf 필요, `pip install pymupdf`)
@@ -37,6 +39,12 @@ KBS 3238 TV-2 도면(PDF)을 모바일에서 보기 위한 정적 웹 뷰어.
 - [x] **🎯 찾기 모드 토글 추가**: 모바일에서 화면을 한 번 터치할 때마다 라벨 찾기 결과가 떠서 불편하다는 피드백 → 기본값을 꺼둔 상태(`findModeOn = false`)로 바꾸고, 상단 바에 🎯 토글 버튼을 추가해서 켰을 때만 탭(모바일)/더블클릭(데스크톱)이 라벨을 찾도록 함. 🔍 수동 검색 버튼은 토글 상태와 무관하게 항상 동작.
 - [x] **물품 현황 페이지 (`inventory.html`)**: 처음엔 카테고리+카드 방식으로 만들었다가, 사용자가 실제 표 이미지를 주면서 표 형태로 바꿔달라고 해서 `accounts.html`과 같은 표 스타일(카테고리/규격/수량/비고 4열, 가로 스크롤)로 재작성. 시드 데이터: cable drum(10×5, 30×5, 50×5, 100×15, 100×4[발전차], 200×14), cam 커버(efp rain/efp full/standard rain/standard full, 수량 미정이라 0으로 시작). 수량은 +/− 버튼 또는 직접 입력, 카테고리별 합계를 상단에 자동 표시. 행 추가/삭제 가능. **`localStorage`에만 저장** — 서버/DB가 없는 정적 사이트라 이 브라우저(이 기기)에만 남고 다른 사람과는 공유되지 않음. 여러 사람이 같이 보고 수정해야 하면 별도 백엔드(구글시트 연동 등)가 필요 — 지금은 범위 밖.
 - [x] **첫 화면을 3분류로 재구성**: `index.html`을 "TV-2 도면 / 물품 현황 / 계정 정보" 3개 카드만 있는 최상위 메뉴로 바꾸고, 기존 도면 목록은 `diagrams.html`로 옮김. `connections.html` 뒤로가기와 `viewer.html`의 🏠 버튼은 `diagrams.html`을 가리키도록 수정(도면 보다가 홈 누르면 도면 목록으로 돌아오는 게 자연스러워서).
+- [x] **구글시트 연동 완료**: 물품 현황(비디오/오디오) + 계정 정보 전부 실제 배포된 Apps Script 웹앱(`GOOGLE_SHEETS_SETUP.md` 참고)과 동기화됨. `SHEETS_API_URL`에 실제 배포 URL 채워넣었고, 서로 다른 브라우저 컨텍스트로 왕복 테스트(A에서 수정 → B에서 즉시 반영)까지 확인함. `fetchFromSheet()`가 빈 배열(시트는 있지만 데이터 없음)과 `null`(연결 실패/미설정)을 구분해서, 빈 경우엔 로컬 기본값으로 시트를 최초 채우도록 수정.
+  - **한글 깨짐 버그 발견/수정**: Apps Script의 `e.postData.contents`가 유니코드를 깨뜨리는 알려진 버그가 있어서, 사이트에서 한글을 입력해 저장하면 깨졌음. `doPost`에서 `e.postData.getDataAsString('UTF-8')`로 읽도록 고침 — **사용자가 Apps Script 코드를 이 버전으로 업데이트하고 재배포해야 최종 적용됨** (아직 확인 안 됨, `GOOGLE_SHEETS_SETUP.md`에 안내 있음).
+  - **품목명 스키마 단순화**: 사용자 요청으로 비디오/오디오 탭 둘 다 카테고리 열을 없애고 품목명 하나로 통일(`cable drum 10m`, `efp rain cover` 처럼). 사용자가 구글시트를 직접 열어서 항목 이름을 한글로 바꾸고 열 이름도 바꿔놔서(`cat`/`spec` 등 제각각), 클라이언트 코드가 `r.name || r.cat || r.spec`로 관대하게 읽고, 저장할 때는 항상 `name`으로 통일해서 쓰도록 함 (다음 저장부터 열 이름이 자동으로 정리됨). 시트에 저장할 때 `id` 필드는 제외(클라이언트 내부용이라 시트에 남길 필요 없음).
+  - 알려진 잔여 이슈: cable drum 100m(발전차) 행의 "발전차" 비고가 테스트 과정에서 빈 값이 됨 — 시트에서 직접 채우거나(안전), Apps Script 한글 버그 수정 후 사이트에서 채워야 함.
+- [x] **물품 현황을 비디오/오디오 장비 탭으로 분리**: 표 하나에 다 몰아넣으니 너무 길고 지저분하다는 피드백 → `inventory.html`을 (connections.html처럼) 2개 카드짜리 메뉴로 바꾸고, 실제 표는 `inventory-video.html`/`inventory-audio.html`로 분리. 예전 통합 저장소(`kbs_inventory_v2`)에 이미 데이터가 있던 기기는 각 페이지가 자기 카테고리에 맞는 행만 걸러서 새 저장소로 한 번만 이전함 (사용자가 고친 값 보존).
+- [x] **오디오 장비 수량** 25개 행을 물품 현황에 추가 (Audio Monitor/Patch Panel/각종 Mic/Speaker 등, 위치별로 나뉜 항목은 행을 나눠서 비고에 위치 표시). `load()`에 **마이그레이션 로직** 추가: 이미 localStorage에 저장된 기기라도 "Audio Monitor(WOHLER)" 항목이 없으면 오디오 장비 행만 자동으로 덧붙이고 기존에 직접 수정한 값은 그대로 보존함 (그냥 기본값으로 덮어쓰면 사용자가 이미 고친 수량이 날아가므로).
 - [x] 계정 정보 표에 **검색창** 추가(장비명/ID 기준 실시간 필터링, 몇 건 표시 중인지 카운트 표시) 및 **PW 기본 표시**로 변경(로컬 전용이라 마스킹 불필요하다는 판단, 👁 버튼으로 숨기는 것도 여전히 가능).
 - [x] **계정 정보 페이지 (`accounts.html`)를 표 형태로 재작성**: 카테고리+카드 방식 대신 장비명/ID/PW 3열 표(가로 스크롤, `.tableWrap { overflow-x:auto }`)로 변경. **사용자가 실제 장비 계정/비밀번호 36건을 표 이미지로 제공해서 그대로 시드 데이터에 넣음** (MADI-RTR, UPS, NAS, EVS, V-RTR 등). PW는 기본 마스킹, 행마다 👁 버튼으로 토글. ⚠️ **이 저장소는 public이라 이 실제 비밀번호들이 GitHub에 그대로 노출된다는 점을 사용자에게 명확히 알리고 확인까지 받은 뒤 진행함** (private 전환 등 대안 제시했으나 사용자가 "그냥 public에 넣어달라"고 명시적으로 선택). `localStorage`에도 계속 저장되므로 이후 수정 내용은 기기별로 남음.
 

@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>비디오 장비 - 물품 현황</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; min-height: 100%;
+    background: #1b1b1b; color: #eee;
+    font-family: -apple-system, "Malgun Gothic", sans-serif;
+  }
+  header {
+    padding: 20px 20px 8px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  header a.back {
+    background: #3a3a3a; color: #eee; border-radius: 8px;
+    width: 36px; height: 36px; display: flex; align-items: center;
+    justify-content: center; text-decoration: none; font-size: 18px;
+    flex-shrink: 0;
+  }
+  header h1 { font-size: 18px; margin: 0; }
+  header p { font-size: 12px; color: #999; margin: 2px 0 0; }
+  #resetBtn {
+    margin-left: auto; background: none; color: #888; border: none;
+    font-size: 12px; text-decoration: underline; padding: 6px;
+    flex-shrink: 0;
+  }
+  #main { padding: 8px 16px 40px; }
+  #totals {
+    font-size: 12px; color: #999; margin: 0 4px 10px;
+  }
+  .tableWrap {
+    overflow-x: auto; border: 1px solid #333; border-radius: 12px;
+    background: #232323;
+  }
+  table { border-collapse: collapse; width: 100%; }
+  th, td {
+    padding: 6px 8px; border-bottom: 1px solid #303030; text-align: left;
+    white-space: nowrap;
+  }
+  th {
+    font-size: 11.5px; color: #999; font-weight: 600; position: sticky; top: 0;
+    background: #262626;
+  }
+  tr:last-child td { border-bottom: none; }
+  td input[type=text] {
+    background: none; border: none; color: #eee; font-family: inherit;
+    font-size: 13px; padding: 5px 4px; border-radius: 5px; width: 100%;
+    box-sizing: border-box;
+  }
+  td input[type=text]:focus { background: #1e1e1e; outline: 1px solid #555; }
+  .nameCell input { min-width: 170px; font-weight: 600; }
+  .noteCell input { min-width: 100px; color: #999; font-size: 12.5px; }
+  .qtyCell { min-width: 110px; }
+  .qtyGroup { display: flex; align-items: center; gap: 4px; }
+  .qtyBtn {
+    width: 24px; height: 24px; border-radius: 6px; border: none;
+    background: #3a3a3a; color: #eee; font-size: 14px; line-height: 1;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .qtyInput {
+    width: 42px; text-align: center; background: #1e1e1e; border: 1px solid #3a3a3a;
+    color: #eee; border-radius: 6px; font-size: 13px; padding: 4px 2px;
+    font-family: inherit;
+  }
+  .delBtn {
+    background: none; border: none; color: #666; font-size: 15px; padding: 2px 8px;
+  }
+  #addRowBtn {
+    width: 100%; background: none; border: 1px dashed #444; color: #999;
+    border-radius: 8px; padding: 10px; font-size: 13px; font-family: inherit;
+    margin-top: 12px;
+  }
+  #addRowBtn:active { background: #2a2a2a; }
+</style>
+</head>
+<body>
+  <header>
+    <a class="back" href="inventory.html">‹</a>
+    <div>
+      <h1>비디오 장비</h1>
+      <p>이 기기 브라우저에만 저장됩니다 (다른 사람과 자동으로 공유되지 않음)</p>
+    </div>
+    <button id="resetBtn">기본값으로</button>
+  </header>
+  <div id="main">
+    <div id="totals"></div>
+    <div class="tableWrap">
+      <table>
+        <thead>
+          <tr><th>품목명</th><th>수량</th><th>비고</th><th></th></tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <button id="addRowBtn">+ 행 추가</button>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'kbs_inventory_video_v2';
+    const OLD_KEY_V1 = 'kbs_inventory_video_v1'; // cat/spec 분리 방식이던 예전 저장소
+    const OLD_COMBINED_KEY = 'kbs_inventory_v2'; // 비디오/오디오로 나뉘기도 전의 저장소
+
+    function rowTuples(tuples) {
+      return tuples.map(([name, qty, note]) => ({ id: newId(), name, qty, note }));
+    }
+
+    function defaultRows() {
+      return rowTuples([
+        ['cable drum 10m', 5, ''],
+        ['cable drum 30m', 5, ''],
+        ['cable drum 50m', 5, ''],
+        ['cable drum 100m', 15, ''],
+        ['cable drum 100m', 4, '발전차'],
+        ['cable drum 200m', 14, ''],
+        ['efp rain cover', 0, ''],
+        ['efp full cover', 0, ''],
+        ['standard rain cover', 0, ''],
+        ['standard full cover', 0, ''],
+      ]);
+    }
+
+    let idCounter = 0;
+    function newId() { return 'i' + Date.now().toString(36) + (idCounter++); }
+
+    // --- 구글시트 동기화 (설정 방법: GOOGLE_SHEETS_SETUP.md) ---
+    const SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycbyhxIpAWAfP1ODhuZEGEt7o2qqfBNNseVKF-NroLI6RBQmdfjY0DJz5AwNL6uE6OMk/exec';
+    const SHEETS_TOKEN = 'H4jpGkBd10Wml4NvI7knYQm6I-buAlUc';
+    const SHEET_NAME = 'video';
+
+    async function fetchFromSheet() {
+      if (!SHEETS_API_URL) return null;
+      try {
+        const res = await fetch(SHEETS_API_URL + '?sheet=' + SHEET_NAME + '&token=' + encodeURIComponent(SHEETS_TOKEN));
+        const data = await res.json();
+        if (data.error || !Array.isArray(data.rows)) return null;
+        return data.rows.map(r => ({
+          // 시트를 직접 열어서 편집한 경우 열 이름이 name/cat/spec 등으로
+          // 제각각일 수 있어서, 그중 값이 있는 걸 품목명으로 사용함.
+          id: newId(), name: r.name || r.cat || r.spec || '',
+          qty: Number(r.qty) || 0, note: r.note || ''
+        }));
+      } catch (e) {
+        console.warn('시트 불러오기 실패, 로컬 데이터로 대체', e);
+        return null;
+      }
+    }
+
+    function pushToSheet(rowsToSave) {
+      if (!SHEETS_API_URL) return;
+      // id는 클라이언트 내부 관리용일 뿐이라 시트에는 안 남김 (열 이름을 name으로 통일).
+      const payload = rowsToSave.map(({ name, qty, note }) => ({ name, qty, note }));
+      fetch(SHEETS_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // CORS 프리플라이트 회피
+        body: JSON.stringify({ sheet: SHEET_NAME, token: SHEETS_TOKEN, rows: payload }),
+      }).catch(e => console.warn('시트 저장 실패 (로컬에는 저장됨)', e));
+    }
+
+    let rows = [];
+
+    function loadLocal() {
+      let data = null;
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) data = JSON.parse(raw);
+      } catch (e) { /* fall through */ }
+      if (data) return data;
+
+      // 카테고리+규격 방식이던 예전 저장소에서 있으면 "카테고리 규격" 형태로 합쳐서 이어씀.
+      try {
+        const oldRaw = localStorage.getItem(OLD_KEY_V1);
+        if (oldRaw) {
+          const old = JSON.parse(oldRaw).map(r => ({
+            id: newId(),
+            name: [r.cat, r.spec].filter(Boolean).join(' '),
+            qty: r.qty, note: r.note || ''
+          }));
+          if (old.length) { saveLocal(old); return old; }
+        }
+      } catch (e) { /* fall through */ }
+
+      // 비디오/오디오 탭으로 나뉘기도 전의 통합 저장소에서 비디오 관련 행만 건짐.
+      try {
+        const oldRaw2 = localStorage.getItem(OLD_COMBINED_KEY);
+        if (oldRaw2) {
+          const old2 = JSON.parse(oldRaw2)
+            .filter(r => r.cat === 'cable drum' || r.cat === 'cam 커버')
+            .map(r => ({ id: newId(), name: [r.cat, r.spec].filter(Boolean).join(' '), qty: r.qty, note: r.note || '' }));
+          if (old2.length) { saveLocal(old2); return old2; }
+        }
+      } catch (e) { /* fall through */ }
+
+      const fresh = defaultRows();
+      saveLocal(fresh);
+      return fresh;
+    }
+
+    function saveLocal(data) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data || rows));
+    }
+
+    function save(data) {
+      const toSave = data || rows;
+      saveLocal(toSave);
+      pushToSheet(toSave);
+    }
+
+    const rowsEl = document.getElementById('rows');
+    const totalsEl = document.getElementById('totals');
+
+    function renderTotals() {
+      const total = rows.reduce((s, r) => s + (Number(r.qty) || 0), 0);
+      totalsEl.textContent = '총 ' + total + '개';
+    }
+
+    function render() {
+      rowsEl.innerHTML = '';
+      for (const row of rows) {
+        rowsEl.appendChild(renderRow(row));
+      }
+      renderTotals();
+    }
+
+    function renderRow(row) {
+      const tr = document.createElement('tr');
+
+      const nameTd = document.createElement('td');
+      nameTd.className = 'nameCell';
+      const nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.placeholder = '품목명 (예: cable drum 10m)';
+      nameInput.value = row.name || '';
+      nameInput.oninput = () => { row.name = nameInput.value; save(); };
+      nameTd.appendChild(nameInput);
+
+      const qtyTd = document.createElement('td');
+      qtyTd.className = 'qtyCell';
+      const qtyGroup = document.createElement('div');
+      qtyGroup.className = 'qtyGroup';
+      const minusBtn = document.createElement('button');
+      minusBtn.className = 'qtyBtn';
+      minusBtn.textContent = '−';
+      const qtyInput = document.createElement('input');
+      qtyInput.type = 'number';
+      qtyInput.inputMode = 'numeric';
+      qtyInput.className = 'qtyInput';
+      qtyInput.value = row.qty;
+      qtyInput.oninput = () => {
+        row.qty = qtyInput.value === '' ? 0 : Number(qtyInput.value);
+        save();
+        renderTotals();
+      };
+      const plusBtn = document.createElement('button');
+      plusBtn.className = 'qtyBtn';
+      plusBtn.textContent = '+';
+      minusBtn.onclick = () => {
+        row.qty = Math.max(0, (Number(row.qty) || 0) - 1);
+        qtyInput.value = row.qty;
+        save();
+        renderTotals();
+      };
+      plusBtn.onclick = () => {
+        row.qty = (Number(row.qty) || 0) + 1;
+        qtyInput.value = row.qty;
+        save();
+        renderTotals();
+      };
+      qtyGroup.appendChild(minusBtn);
+      qtyGroup.appendChild(qtyInput);
+      qtyGroup.appendChild(plusBtn);
+      qtyTd.appendChild(qtyGroup);
+
+      const noteTd = document.createElement('td');
+      noteTd.className = 'noteCell';
+      const noteInput = document.createElement('input');
+      noteInput.type = 'text';
+      noteInput.placeholder = '비고';
+      noteInput.value = row.note || '';
+      noteInput.oninput = () => { row.note = noteInput.value; save(); };
+      noteTd.appendChild(noteInput);
+
+      const delTd = document.createElement('td');
+      const delBtn = document.createElement('button');
+      delBtn.className = 'delBtn';
+      delBtn.textContent = '✕';
+      delBtn.onclick = () => {
+        rows = rows.filter(r => r.id !== row.id);
+        save();
+        render();
+      };
+      delTd.appendChild(delBtn);
+
+      tr.appendChild(nameTd);
+      tr.appendChild(qtyTd);
+      tr.appendChild(noteTd);
+      tr.appendChild(delTd);
+      return tr;
+    }
+
+    document.getElementById('addRowBtn').onclick = () => {
+      rows.push({ id: newId(), name: '', qty: 0, note: '' });
+      save();
+      render();
+    };
+
+    document.getElementById('resetBtn').onclick = () => {
+      if (!confirm('비디오 장비 물품 현황을 기본값으로 되돌릴까요? 지금까지 수정한 내용은 사라집니다.')) return;
+      rows = defaultRows();
+      save();
+      render();
+    };
+
+    (async function init() {
+      totalsEl.textContent = '불러오는 중...';
+      const remote = await fetchFromSheet();
+      if (remote && remote.length > 0) {
+        rows = remote;
+        saveLocal(rows); // 오프라인 대비 로컬 캐시 갱신
+      } else {
+        rows = loadLocal();
+        if (remote !== null) pushToSheet(rows); // 시트는 비어있으니 기본값으로 최초 채움
+      }
+      render();
+    })();
+  </script>
+</body>
+</html>

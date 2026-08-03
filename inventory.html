@@ -9,7 +9,7 @@
 <title>물품 현황</title>
 <style>
   html, body {
-    margin: 0; padding: 0; min-height: 100%;
+    margin: 0; padding: 0; height: 100%;
     background: #1b1b1b; color: #eee;
     font-family: -apple-system, "Malgun Gothic", sans-serif;
   }
@@ -24,241 +24,41 @@
     flex-shrink: 0;
   }
   header h1 { font-size: 18px; margin: 0; }
-  header p { font-size: 12px; color: #999; margin: 2px 0 0; }
-  #resetBtn {
-    margin-left: auto; background: none; color: #888; border: none;
-    font-size: 12px; text-decoration: underline; padding: 6px;
-    flex-shrink: 0;
+  #cards {
+    display: flex; flex-direction: column; gap: 12px;
+    padding: 16px 20px 30px; max-width: 480px; margin: 0 auto;
   }
-  #main { padding: 8px 16px 40px; }
-  #totals {
-    font-size: 12px; color: #999; margin: 0 4px 10px;
+  a.card {
+    display: flex; align-items: center; gap: 14px;
+    background: #262626; border-radius: 12px; padding: 16px;
+    text-decoration: none; color: #eee;
+    box-shadow: 0 2px 8px rgba(0,0,0,.4);
+    border: 1px solid #333;
   }
-  .tableWrap {
-    overflow-x: auto; border: 1px solid #333; border-radius: 12px;
-    background: #232323;
+  a.card:active { background: #333; }
+  .icon {
+    font-size: 22px; width: 40px; height: 40px;
+    display: flex; align-items: center; justify-content: center;
+    background: #3a3a3a; border-radius: 8px; flex-shrink: 0;
   }
-  table { border-collapse: collapse; width: 100%; }
-  th, td {
-    padding: 6px 8px; border-bottom: 1px solid #303030; text-align: left;
-    white-space: nowrap;
-  }
-  th {
-    font-size: 11.5px; color: #999; font-weight: 600; position: sticky; top: 0;
-    background: #262626;
-  }
-  tr:last-child td { border-bottom: none; }
-  td input[type=text] {
-    background: none; border: none; color: #eee; font-family: inherit;
-    font-size: 13px; padding: 5px 4px; border-radius: 5px; width: 100%;
-    box-sizing: border-box;
-  }
-  td input[type=text]:focus { background: #1e1e1e; outline: 1px solid #555; }
-  .catCell input { min-width: 100px; font-weight: 600; }
-  .specCell input { min-width: 110px; }
-  .noteCell input { min-width: 90px; color: #999; font-size: 12.5px; }
-  .qtyCell { min-width: 110px; }
-  .qtyGroup { display: flex; align-items: center; gap: 4px; }
-  .qtyBtn {
-    width: 24px; height: 24px; border-radius: 6px; border: none;
-    background: #3a3a3a; color: #eee; font-size: 14px; line-height: 1;
-    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-  }
-  .qtyInput {
-    width: 42px; text-align: center; background: #1e1e1e; border: 1px solid #3a3a3a;
-    color: #eee; border-radius: 6px; font-size: 13px; padding: 4px 2px;
-    font-family: inherit;
-  }
-  .delBtn {
-    background: none; border: none; color: #666; font-size: 15px; padding: 2px 8px;
-  }
-  #addRowBtn {
-    width: 100%; background: none; border: 1px dashed #444; color: #999;
-    border-radius: 8px; padding: 10px; font-size: 13px; font-family: inherit;
-    margin-top: 12px;
-  }
-  #addRowBtn:active { background: #2a2a2a; }
+  .card .label { font-size: 15px; font-weight: 600; }
+  .card .sub { font-size: 11px; color: #999; margin-top: 2px; }
 </style>
 </head>
 <body>
   <header>
     <a class="back" href="index.html">‹</a>
-    <div>
-      <h1>물품 현황</h1>
-      <p>이 기기 브라우저에만 저장됩니다 (다른 사람과 자동으로 공유되지 않음)</p>
-    </div>
-    <button id="resetBtn">기본값으로</button>
+    <h1>물품 현황</h1>
   </header>
-  <div id="main">
-    <div id="totals"></div>
-    <div class="tableWrap">
-      <table>
-        <thead>
-          <tr><th>카테고리</th><th>규격</th><th>수량</th><th>비고</th><th></th></tr>
-        </thead>
-        <tbody id="rows"></tbody>
-      </table>
-    </div>
-    <button id="addRowBtn">+ 행 추가</button>
+  <div id="cards">
+    <a class="card" href="inventory-video.html">
+      <div class="icon">📹</div>
+      <div><div class="label">비디오 장비</div><div class="sub">Cable Drum, Cam 커버 등</div></div>
+    </a>
+    <a class="card" href="inventory-audio.html">
+      <div class="icon">🎙️</div>
+      <div><div class="label">오디오 장비</div><div class="sub">Audio Monitor, Mic, Speaker 등</div></div>
+    </a>
   </div>
-
-  <script>
-    const STORAGE_KEY = 'kbs_inventory_v2';
-
-    function defaultInventory() {
-      const rows = [
-        ['cable drum', '10', 5, ''],
-        ['cable drum', '30', 5, ''],
-        ['cable drum', '50', 5, ''],
-        ['cable drum', '100', 15, ''],
-        ['cable drum', '100', 4, '발전차'],
-        ['cable drum', '200', 14, ''],
-        ['cam 커버', 'efp rain', 0, ''],
-        ['cam 커버', 'efp full', 0, ''],
-        ['cam 커버', 'standard rain', 0, ''],
-        ['cam 커버', 'standard full', 0, ''],
-      ];
-      return rows.map(([cat, spec, qty, note]) => ({ id: newId(), cat, spec, qty, note }));
-    }
-
-    let idCounter = 0;
-    function newId() { return 'i' + Date.now().toString(36) + (idCounter++); }
-
-    let rows = load();
-
-    function load() {
-      try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (raw) return JSON.parse(raw);
-      } catch (e) { /* fall through to defaults */ }
-      const fresh = defaultInventory();
-      save(fresh);
-      return fresh;
-    }
-
-    function save(data) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data || rows));
-    }
-
-    const rowsEl = document.getElementById('rows');
-    const totalsEl = document.getElementById('totals');
-
-    function renderTotals() {
-      const byCat = new Map();
-      for (const r of rows) {
-        const key = r.cat || '(미분류)';
-        byCat.set(key, (byCat.get(key) || 0) + (Number(r.qty) || 0));
-      }
-      totalsEl.textContent = [...byCat.entries()].map(([k, v]) => k + ' 총 ' + v + '개').join(' · ');
-    }
-
-    function render() {
-      rowsEl.innerHTML = '';
-      for (const row of rows) {
-        rowsEl.appendChild(renderRow(row));
-      }
-      renderTotals();
-    }
-
-    function renderRow(row) {
-      const tr = document.createElement('tr');
-
-      const catTd = document.createElement('td');
-      catTd.className = 'catCell';
-      const catInput = document.createElement('input');
-      catInput.type = 'text';
-      catInput.value = row.cat || '';
-      catInput.oninput = () => { row.cat = catInput.value; save(); renderTotals(); };
-      catTd.appendChild(catInput);
-
-      const specTd = document.createElement('td');
-      specTd.className = 'specCell';
-      const specInput = document.createElement('input');
-      specInput.type = 'text';
-      specInput.placeholder = '규격';
-      specInput.value = row.spec || '';
-      specInput.oninput = () => { row.spec = specInput.value; save(); };
-      specTd.appendChild(specInput);
-
-      const qtyTd = document.createElement('td');
-      qtyTd.className = 'qtyCell';
-      const qtyGroup = document.createElement('div');
-      qtyGroup.className = 'qtyGroup';
-      const minusBtn = document.createElement('button');
-      minusBtn.className = 'qtyBtn';
-      minusBtn.textContent = '−';
-      const qtyInput = document.createElement('input');
-      qtyInput.type = 'number';
-      qtyInput.inputMode = 'numeric';
-      qtyInput.className = 'qtyInput';
-      qtyInput.value = row.qty;
-      qtyInput.oninput = () => {
-        row.qty = qtyInput.value === '' ? 0 : Number(qtyInput.value);
-        save();
-        renderTotals();
-      };
-      const plusBtn = document.createElement('button');
-      plusBtn.className = 'qtyBtn';
-      plusBtn.textContent = '+';
-      minusBtn.onclick = () => {
-        row.qty = Math.max(0, (Number(row.qty) || 0) - 1);
-        qtyInput.value = row.qty;
-        save();
-        renderTotals();
-      };
-      plusBtn.onclick = () => {
-        row.qty = (Number(row.qty) || 0) + 1;
-        qtyInput.value = row.qty;
-        save();
-        renderTotals();
-      };
-      qtyGroup.appendChild(minusBtn);
-      qtyGroup.appendChild(qtyInput);
-      qtyGroup.appendChild(plusBtn);
-      qtyTd.appendChild(qtyGroup);
-
-      const noteTd = document.createElement('td');
-      noteTd.className = 'noteCell';
-      const noteInput = document.createElement('input');
-      noteInput.type = 'text';
-      noteInput.placeholder = '비고';
-      noteInput.value = row.note || '';
-      noteInput.oninput = () => { row.note = noteInput.value; save(); };
-      noteTd.appendChild(noteInput);
-
-      const delTd = document.createElement('td');
-      const delBtn = document.createElement('button');
-      delBtn.className = 'delBtn';
-      delBtn.textContent = '✕';
-      delBtn.onclick = () => {
-        rows = rows.filter(r => r.id !== row.id);
-        save();
-        render();
-      };
-      delTd.appendChild(delBtn);
-
-      tr.appendChild(catTd);
-      tr.appendChild(specTd);
-      tr.appendChild(qtyTd);
-      tr.appendChild(noteTd);
-      tr.appendChild(delTd);
-      return tr;
-    }
-
-    document.getElementById('addRowBtn').onclick = () => {
-      rows.push({ id: newId(), cat: '', spec: '', qty: 0, note: '' });
-      save();
-      render();
-    };
-
-    document.getElementById('resetBtn').onclick = () => {
-      if (!confirm('전체 물품 현황을 기본값으로 되돌릴까요? 지금까지 수정한 내용은 사라집니다.')) return;
-      rows = defaultInventory();
-      save();
-      render();
-    };
-
-    render();
-  </script>
 </body>
 </html>
