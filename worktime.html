@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>주 52시간</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; min-height: 100%;
+    background: #1b1b1b; color: #eee;
+    font-family: -apple-system, "Malgun Gothic", sans-serif;
+  }
+  header {
+    padding: 20px 20px 8px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  header a.back {
+    background: #3a3a3a; color: #eee; border-radius: 8px;
+    width: 36px; height: 36px; display: flex; align-items: center;
+    justify-content: center; text-decoration: none; font-size: 18px;
+    flex-shrink: 0;
+  }
+  header h1 { font-size: 18px; margin: 0; flex: 1; }
+  #resetAllBtn {
+    background: none; border: none; color: #888; font-size: 12px;
+    text-decoration: underline; padding: 6px; flex-shrink: 0;
+  }
+  #main { padding: 8px 16px 40px; max-width: 520px; margin: 0 auto; }
+
+  #summary {
+    background: #262626; border: 1px solid #333; border-radius: 14px;
+    padding: 16px; margin-bottom: 16px;
+  }
+  #summaryTop {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  #usedLabel { font-size: 13px; color: #999; }
+  #usedValue { font-size: 15px; font-weight: 700; }
+  #barWrap {
+    height: 10px; background: #1b1b1b; border-radius: 6px; overflow: hidden;
+    border: 1px solid #333;
+  }
+  #barFill {
+    height: 100%; border-radius: 6px; background: #3d8bff;
+    transition: width .2s ease;
+  }
+  #barFill.warn { background: #e0a92f; }
+  #barFill.over { background: #e0503c; }
+  #remainLabel {
+    margin-top: 10px; font-size: 13px; text-align: center; color: #ccc;
+  }
+  #remainLabel.over { color: #ff8a75; font-weight: 700; }
+
+  /* 일주일 전체가 한 화면에 들어오도록 표 형태로 */
+  .tableWrap {
+    overflow-x: auto; border: 1px solid #333; border-radius: 12px;
+    background: #232323;
+  }
+  table { border-collapse: collapse; width: 100%; }
+  th, td {
+    padding: 7px 4px; border-bottom: 1px solid #2c2c2c; text-align: center;
+    white-space: nowrap;
+  }
+  thead th {
+    font-size: 10.5px; color: #888; font-weight: 600; background: #262626;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  .dowCell { font-size: 13px; font-weight: 700; width: 22px; }
+  .dowCell.dow-sat { color: #6fa8ff; }
+  .dowCell.dow-sun { color: #ff8a75; }
+
+  .stateBtn {
+    border: none; border-radius: 6px; padding: 6px 3px; font-size: 11.5px;
+    font-family: inherit; color: #fff; width: 42px;
+  }
+  .stateBtn.work { background: #3d6bff; }
+  .stateBtn.half { background: #a8791f; }
+  .stateBtn.off { background: #3a3a3a; color: #999; }
+
+  .hm {
+    display: inline-flex; align-items: center; gap: 1px; background: #1b1b1b;
+    border: 1px solid #3a3a3a; border-radius: 6px; padding: 2px 4px;
+  }
+  .hm .hourVal, .hm .minToggle {
+    width: 20px; background: none; border: none; color: #eee; text-align: center;
+    font-size: 12.5px; font-family: inherit; padding: 3px 0; user-select: none;
+    -webkit-user-select: none; touch-action: none;
+  }
+  .hm .hourVal:active, .hm .minToggle:active { color: #6fa8ff; }
+  .hm span { color: #666; font-size: 11px; }
+  .dash { color: #555; font-size: 13px; }
+
+  .hoursCell { font-size: 12px; color: #ccc; line-height: 1.2; }
+  .hoursMain { font-weight: 600; }
+  .hoursBreak { font-size: 9.5px; color: #777; white-space: nowrap; }
+  .dayResetBtn {
+    background: none; border: none; color: #666; font-size: 14px; padding: 2px 4px;
+  }
+</style>
+</head>
+<body>
+  <header>
+    <a class="back" href="index.html">‹</a>
+    <h1>주 52시간</h1>
+    <button id="resetAllBtn">전체 초기화</button>
+  </header>
+  <div id="main">
+    <div id="summary">
+      <div id="summaryTop">
+        <span id="usedLabel">이번 주 사용</span>
+        <span id="usedValue">0.0 / 52시간</span>
+      </div>
+      <div id="barWrap"><div id="barFill" style="width:0%"></div></div>
+      <div id="remainLabel"></div>
+    </div>
+
+    <div class="tableWrap">
+      <table>
+        <thead>
+          <tr>
+            <th></th><th>상태</th><th>시작</th><th>종료</th><th>시간</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="days"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'kbs_worktime_week';
+    const WEEKLY_CAP = 52;
+    const STANDARD_DAY_HOURS = 8;
+    const DOW_LABELS = ['월', '화', '수', '목', '금', '토', '일'];
+    const TYPE_ORDER = ['work', 'half', 'off'];
+    const TYPE_LABELS = { work: '근무', half: '반차', off: '휴무' };
+
+    function defaultDays() {
+      // 평일은 9~18시 근무로 미리 채워두고, 주말은 휴무로 시작 — 전부 수정 가능
+      return [0, 1, 2, 3, 4, 5, 6].map(i => (
+        i <= 4 ? { type: 'work', start: '09:00', end: '18:00' } : { type: 'off', start: '', end: '' }
+      ));
+    }
+
+    function loadDays() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length === 7) return parsed;
+        }
+      } catch (e) { /* fall through */ }
+      return defaultDays();
+    }
+
+    function saveDays() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(days));
+    }
+
+    function grossHours(start, end) {
+      if (!start || !end) return 0;
+      const [sh, sm] = start.split(':').map(Number);
+      const [eh, em] = end.split(':').map(Number);
+      let startMin = sh * 60 + sm;
+      let endMin = eh * 60 + em;
+      // 익일 근무는 종료 시각을 25:00, 26:00처럼 24시 이상으로 직접 올리면 됨.
+      // 그렇게 안 하고 그냥 01:00처럼 작게 입력했을 때를 위한 안전장치로만 +24시간 처리.
+      if (endMin <= startMin) endMin += 24 * 60;
+      return (endMin - startMin) / 60;
+    }
+
+    // 근로기준법 상 4시간마다 30분 휴게 (근무자 요청 규칙과 동일)
+    function netHours(gross) {
+      if (gross <= 0) return 0;
+      const breakMin = Math.floor(gross / 4) * 30;
+      return Math.max(0, gross - breakMin / 60);
+    }
+
+    function dayComputed(day) {
+      if (day.type === 'off') {
+        return { hours: 0, short: '-', breakNote: '' };
+      }
+      if (day.type === 'half') {
+        const halfHours = STANDARD_DAY_HOURS / 2;
+        return { hours: halfHours, short: halfHours.toFixed(1), breakNote: '' };
+      }
+      const gross = grossHours(day.start, day.end);
+      const net = netHours(gross);
+      const breakMin = gross > 0 ? Math.floor(gross / 4) * 30 : 0;
+      return {
+        hours: net,
+        short: gross > 0 ? net.toFixed(1) : '-',
+        breakNote: breakMin > 0 ? '휴게 ' + breakMin + '분' : ''
+      };
+    }
+
+    let days = loadDays();
+
+    const daysEl = document.getElementById('days');
+    const usedValue = document.getElementById('usedValue');
+    const barFill = document.getElementById('barFill');
+    const remainLabel = document.getElementById('remainLabel');
+
+    let dayHoursEls = new Array(7); // 요일별 "시간" 셀 참조 (가벼운 갱신용)
+
+    // 표 전체를 다시 그림 (입력 버튼까지 새로 만들어짐) — 상태 전환, 초기화처럼 구조가
+    // 바뀔 때만 호출. 드래그/탭 도중 이걸 부르면 포커스/드래그가 끊기므로 쓰지 않음.
+    function renderAll() {
+      daysEl.innerHTML = '';
+      let total = 0;
+      for (let i = 0; i < 7; i++) {
+        const computed = dayComputed(days[i]);
+        total += computed.hours;
+        daysEl.appendChild(renderDayRow(i, days[i], computed));
+      }
+      updateSummary(total);
+    }
+
+    // 시간 버튼을 드래그/탭할 때 쓰는 가벼운 갱신 — DOM을 새로 안 만들고 계산 결과와
+    // 상단 합계만 갱신해서 드래그가 안 끊김.
+    function updateComputedDisplay() {
+      let total = 0;
+      for (let i = 0; i < 7; i++) {
+        const computed = dayComputed(days[i]);
+        total += computed.hours;
+        if (dayHoursEls[i]) {
+          dayHoursEls[i].main.textContent = computed.short;
+          dayHoursEls[i].breakEl.textContent = computed.breakNote;
+        }
+      }
+      updateSummary(total);
+    }
+
+    function updateSummary(total) {
+      usedValue.textContent = total.toFixed(1) + ' / ' + WEEKLY_CAP + '시간';
+      const pct = Math.min(100, (total / WEEKLY_CAP) * 100);
+      barFill.style.width = pct + '%';
+      barFill.classList.remove('warn', 'over');
+      remainLabel.classList.remove('over');
+      if (total > WEEKLY_CAP) {
+        barFill.classList.add('over');
+        remainLabel.classList.add('over');
+        remainLabel.textContent = (total - WEEKLY_CAP).toFixed(1) + '시간 초과!';
+      } else {
+        const remain = WEEKLY_CAP - total;
+        if (remain <= 8) barFill.classList.add('warn');
+        remainLabel.textContent = remain.toFixed(1) + '시간 남음';
+      }
+    }
+
+    // 드래그(위/아래)로 값을 올리고 내릴 수 있게 하는 헬퍼. 모바일에서 탭하면 키보드가
+    // 뜨는 걸 아예 없애려고 <input> 대신 <button>에 붙여서 쓰며, 살짝 움직이면(문턱값
+    // 이하) 그냥 탭으로 보고 onTap 실행, 그 이상 드래그하면 드래그한 만큼 값을 조절함.
+    const DRAG_START_THRESHOLD = 10;
+    const DRAG_PX_PER_STEP = 12;
+    function attachDragAdjust(el, min, max, step, getValue, setValue, onTap) {
+      let startY = 0, startVal = 0, dragging = false, moved = false;
+      el.style.touchAction = 'none';
+
+      el.addEventListener('pointerdown', (e) => {
+        startY = e.clientY;
+        startVal = getValue();
+        dragging = true;
+        moved = false;
+      });
+      el.addEventListener('pointermove', (e) => {
+        if (!dragging) return;
+        const deltaY = startY - e.clientY; // 위로 드래그하면 양수 -> 값 증가
+        if (!moved) {
+          if (Math.abs(deltaY) < DRAG_START_THRESHOLD) return;
+          moved = true;
+          el.setPointerCapture(e.pointerId);
+        }
+        e.preventDefault();
+        const steps = Math.round(deltaY / DRAG_PX_PER_STEP);
+        const val = Math.min(max, Math.max(min, startVal + steps * step));
+        setValue(val);
+      });
+      el.addEventListener('pointerup', () => {
+        if (!moved && onTap) onTap();
+        dragging = false;
+      });
+      el.addEventListener('pointercancel', () => { dragging = false; });
+
+      // PC: 마우스 휠로도 값 조절 (휠 위로 굴리면 증가, 아래로 굴리면 감소)
+      el.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const dir = e.deltaY < 0 ? 1 : -1;
+        const val = Math.min(max, Math.max(min, getValue() + dir * step));
+        setValue(val);
+      }, { passive: false });
+    }
+
+    // "HH:MM" 문자열을 시/분 버튼 두 개로 다루는 필드 — 텍스트 키보드 입력 없이,
+    // 위/아래로 드래그(또는 살짝 탭)해서만 값을 바꿈. 자정 넘어가는 근무는 종료 시를
+    // 24/25/26...으로 계속 올리면 됨. 분은 0/30만 쓰므로 탭/드래그하면 00↔30 토글.
+    function makeHMField(value, onChange) {
+      const [vh, vm] = (value || '').split(':');
+      const wrap = document.createElement('div');
+      wrap.className = 'hm';
+
+      let hourVal = (vh !== undefined && vh !== '') ? Number(vh) : null; // null = 미입력
+      const hourBtn = document.createElement('button');
+      hourBtn.type = 'button';
+      hourBtn.className = 'hourVal';
+      hourBtn.textContent = hourVal === null ? '--' : String(hourVal).padStart(2, '0');
+
+      const colon = document.createElement('span');
+      colon.textContent = ':';
+
+      let minuteVal = (vm !== undefined && vm !== '' && Number(vm) >= 30) ? 30 : 0;
+      const minBtn = document.createElement('button');
+      minBtn.type = 'button';
+      minBtn.className = 'minToggle';
+      minBtn.textContent = String(minuteVal).padStart(2, '0');
+
+      function emit() {
+        if (hourVal === null) { onChange(''); return; }
+        onChange(String(hourVal).padStart(2, '0') + ':' + String(minuteVal).padStart(2, '0'));
+      }
+
+      attachDragAdjust(
+        hourBtn, 0, 29, 1,
+        () => (hourVal === null ? 9 : hourVal),
+        (v) => { hourVal = v; hourBtn.textContent = String(v).padStart(2, '0'); emit(); },
+        () => { hourVal = (hourVal === null) ? 9 : Math.min(29, hourVal + 1); hourBtn.textContent = String(hourVal).padStart(2, '0'); emit(); }
+      );
+
+      function toggleMinute() {
+        minuteVal = minuteVal === 0 ? 30 : 0;
+        minBtn.textContent = String(minuteVal).padStart(2, '0');
+        emit();
+      }
+      attachDragAdjust(minBtn, 0, 30, 30, () => minuteVal, (v) => { minuteVal = v; minBtn.textContent = String(v).padStart(2, '0'); emit(); }, toggleMinute);
+
+      wrap.appendChild(hourBtn);
+      wrap.appendChild(colon);
+      wrap.appendChild(minBtn);
+      return wrap;
+    }
+
+    function resetDay(i) {
+      days[i] = defaultDays()[i];
+      saveDays();
+      renderAll();
+    }
+
+    function renderDayRow(i, day, computed) {
+      const tr = document.createElement('tr');
+
+      const dowTd = document.createElement('td');
+      dowTd.className = 'dowCell' + (i === 5 ? ' dow-sat' : (i === 6 ? ' dow-sun' : ''));
+      dowTd.textContent = DOW_LABELS[i];
+      tr.appendChild(dowTd);
+
+      const stateTd = document.createElement('td');
+      const stateBtn = document.createElement('button');
+      stateBtn.className = 'stateBtn ' + day.type;
+      stateBtn.textContent = TYPE_LABELS[day.type];
+      stateBtn.onclick = () => {
+        const idx = TYPE_ORDER.indexOf(day.type);
+        day.type = TYPE_ORDER[(idx + 1) % TYPE_ORDER.length];
+        if (day.type === 'work' && !day.start && !day.end) {
+          day.start = '09:00';
+          day.end = '18:00';
+        }
+        saveDays();
+        renderAll();
+      };
+      stateTd.appendChild(stateBtn);
+      tr.appendChild(stateTd);
+
+      if (day.type === 'work') {
+        const startTd = document.createElement('td');
+        startTd.appendChild(makeHMField(day.start, (v) => { day.start = v; saveDays(); updateComputedDisplay(); }));
+        tr.appendChild(startTd);
+
+        const endTd = document.createElement('td');
+        endTd.appendChild(makeHMField(day.end, (v) => { day.end = v; saveDays(); updateComputedDisplay(); }));
+        tr.appendChild(endTd);
+      } else {
+        const startTd = document.createElement('td');
+        startTd.className = 'dash';
+        startTd.textContent = '-';
+        const endTd = document.createElement('td');
+        endTd.className = 'dash';
+        endTd.textContent = '-';
+        tr.appendChild(startTd);
+        tr.appendChild(endTd);
+      }
+
+      const hoursTd = document.createElement('td');
+      hoursTd.className = 'hoursCell';
+      const hoursMain = document.createElement('div');
+      hoursMain.className = 'hoursMain';
+      hoursMain.textContent = computed.short;
+      const hoursBreak = document.createElement('div');
+      hoursBreak.className = 'hoursBreak';
+      hoursBreak.textContent = computed.breakNote;
+      hoursTd.appendChild(hoursMain);
+      hoursTd.appendChild(hoursBreak);
+      dayHoursEls[i] = { main: hoursMain, breakEl: hoursBreak };
+      tr.appendChild(hoursTd);
+
+      const resetTd = document.createElement('td');
+      const resetBtn = document.createElement('button');
+      resetBtn.className = 'dayResetBtn';
+      resetBtn.textContent = '↺';
+      resetBtn.title = '이 요일만 초기화';
+      resetBtn.onclick = () => resetDay(i);
+      resetTd.appendChild(resetBtn);
+      tr.appendChild(resetTd);
+
+      return tr;
+    }
+
+    document.getElementById('resetAllBtn').onclick = () => {
+      if (!confirm('이번 주 근무시간 전체를 기본값으로 되돌릴까요? 지금까지 입력한 내용은 사라집니다.')) return;
+      days = defaultDays();
+      saveDays();
+      renderAll();
+    };
+
+    renderAll();
+  </script>
+</body>
+</html>
